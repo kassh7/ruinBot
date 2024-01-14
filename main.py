@@ -1,6 +1,9 @@
 import asyncio
+import logging
+
 import discord
 import os
+import sqlite3
 
 from discord.ext import commands
 from dotenv import load_dotenv
@@ -8,6 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 cogs_dir = "cogs"
+#logging.basicConfig(level=logging.DEBUG)
 
 intents = discord.Intents.all()
 intents.members = True
@@ -16,10 +20,16 @@ bot = commands.Bot(command_prefix="r!", intents=intents, help_command=None)
 
 @bot.event
 async def on_ready():
-    print("na re")
+    bot.db = sqlite3.connect("usr/db.sqlite")
+    cursor = bot.db.cursor()
+    cursor.execute("CREATE TABLE IF NOT EXISTS soma(user INTEGER UNIQUE, cooldown timestamp, guild INTEGER, wins INTEGER)")
+    bot.db.commit()
+
     await bot.change_presence(activity=discord.Game('anyáddal'))
-    # for guild in bot.guilds:
-    #    await guild.system_channel.send("na re")
+    print("na re")
+
+    kodolo_chan = bot.get_channel(544959530723835944)
+    #await kodolo_chan.send("na re")
 
 
 async def load_cogs():
@@ -37,4 +47,4 @@ async def main():
     await load_cogs()
     await bot.start(TOKEN)
 
-asyncio.run(main())
+asyncio.run(main(), debug=True)
