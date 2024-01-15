@@ -1,4 +1,7 @@
+multidict==6.0.2
 python-dotenv==0.21.0
 discord.py[voice]==2.3.0
 pillow~=10.2.0
 requests~=2.31.0
+ciso8601~=2.3.1
+six~=1.16.0

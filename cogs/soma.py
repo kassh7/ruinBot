@@ -32,7 +32,6 @@ class soma(commands.Cog):
             role = discord.utils.get(ctx.guild.roles, name="soma")
             user = ctx.author
             personal_cd = await self.check_personal_cooldown(user, ctx)
-            print(personal_cd)
             if role and await self.check_cooldown(cooldown) and personal_cd:
                 rgb = random.randint(0, 0xFFFFFF)
                 random_color = discord.Color(rgb)
