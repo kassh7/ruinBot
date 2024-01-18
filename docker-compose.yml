@@ -2,7 +2,5 @@ services:
   bot:
     container_name: bot
     image: ghcr.io/kassh7/ruinbot:latest
-    env_file:
-      - .env
     volumes:
       - /root/ruinbotvolume/usr:/app/usr
