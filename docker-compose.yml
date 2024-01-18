@@ -1,0 +1,4 @@
+services:
+  bot:
+    container_name: bot
+    image: ghcr.io/kassh7/ruinbot:latest
