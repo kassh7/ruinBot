@@ -3,4 +3,4 @@ services:
     container_name: bot
     image: ghcr.io/kassh7/ruinbot:latest
     volumes:
-      - /root/ruinbotvolume/usr:/app/usr
+      - /root/ruinbotvolume:/app

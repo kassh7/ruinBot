@@ -5,6 +5,5 @@ ADD ./requirements.txt /app/requirements.txt
 WORKDIR /app
 RUN pip install -r requirements.txt
 ADD . /app
-COPY .env /app/.env
 
 CMD [ "python", "main.py" ]
