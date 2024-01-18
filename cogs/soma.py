@@ -13,7 +13,7 @@ from discord.ext import commands
 class soma(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.cd_path = 'usr/somacd.txt'
+        self.cd_path = '/usr/somacd.txt'
         # ezt lehet nem ide kéne de at this point leszarom
         if not os.path.exists(self.cd_path):
             with open(self.cd_path, 'w') as file:
