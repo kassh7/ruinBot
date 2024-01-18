@@ -1,1 +1,1 @@
-ez csak cirkadián adjusztment nem igazi bruszt tesomsz
+ez csak cirkadián adjusztment nem igazi bruszt tesomsz.
