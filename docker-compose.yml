@@ -4,4 +4,4 @@ services:
     image: ghcr.io/kassh7/ruinbot:latest
     volumes:
       - /root/ruinbotvolume:/app
-    entrypoint: ["ls", "-la"]
+      - /root/ruinbotvolume/.env:/app/.env
