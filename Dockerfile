@@ -4,7 +4,7 @@ RUN apt -y update && apt -y upgrade
 ADD ./requirements.txt /app/requirements.txt
 WORKDIR /app
 RUN pip install -r requirements.txt
-RUN touch usr/somacd.txt
+RUN touch /usr/somacd.txt
 ADD . /app
 
 CMD [ "python", "main.py" ]
