@@ -39,14 +39,15 @@ class soma(commands.Cog):
 
                 embed = discord.Embed(title="kapta", colour=random_color)
                 img = Image.new(mode="RGB", size=(50, 50), color=f"{random_color}")
-                img.save("res/soma.png")
-                file = discord.File("res/soma.png")
+                img.save("usr/soma.png")
+                file = discord.File("usr/soma.png")
                 embed.set_image(url="attachment://soma.png")
                 r = requests.get(f"http://www.thecolorapi.com/id?hex={str(random_color)[1:]}")
                 res = r.json()
                 embed.add_field(name="az új szín:", value=f"{res['name']['value']}")
 
                 await self.make_cooldown_timestamp()
+                await self.register_win(user, ctx)
                 await ctx.send(file=file, embed=embed)
             else:
                 embed = discord.Embed(title="nem kapta")
@@ -56,6 +57,26 @@ class soma(commands.Cog):
                 await self.incur_personal_cooldown(user, ctx)
                 await ctx.send(file=file, embed=embed)
 
+        except Exception as e:
+            print(f"baj van: {e}")
+            await ctx.send(f"baj van: {e}")
+
+    @commands.command(aliases=['somalb'])
+    async def soma_leaderboard(self, ctx):
+        try:
+            cursor = self.bot.db.cursor()
+            cursor.execute("SELECT user, wins FROM soma WHERE guild = ? AND wins > 0 ORDER BY wins desc",
+                           (ctx.guild.id,))
+            data = cursor.fetchall()
+
+            if data:
+                embed = discord.Embed(title="Somdler Listája")
+                field = ""
+                for row in data:
+                    field = field + f"{self.bot.get_user(row[0]).display_name} - {row[1]} \n"
+                embed.add_field(name="Legjobban brusztolók:", value=field)
+
+                await ctx.send(embed=embed)
         except Exception as e:
             print(f"baj van: {e}")
             await ctx.send(f"baj van: {e}")
@@ -103,6 +124,18 @@ class soma(commands.Cog):
                 DO UPDATE SET cooldown=excluded.cooldown;
                 ''', (user.id, datetime.now(timezone.utc), ctx.guild.id))
         self.bot.db.commit()
+
+    async def register_win(self, user, ctx):
+        cursor = self.bot.db.cursor()
+        cursor.execute("SELECT wins FROM soma WHERE user = ? AND guild = ?", (user.id, ctx.guild.id))
+        data = cursor.fetchone()
+        if data:
+            wins = data[0]
+            cursor = self.bot.db.cursor()
+            cursor.execute("UPDATE soma SET wins = ? WHERE user = ? AND guild = ?", (wins + 1, user.id, ctx.guild.id))
+            self.bot.db.commit()
+        else:
+            print('win register problema van')
 
 
 async def setup(bot):
