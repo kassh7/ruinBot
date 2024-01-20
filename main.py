@@ -30,8 +30,9 @@ async def on_ready():
 
     await bot.change_presence(activity=discord.Game('anyáddal'))
     print("na re")
-    kodolo_chan = bot.get_channel(NARE)
+    kodolo_chan = bot.get_channel(int(NARE))
     await kodolo_chan.send("na re")
+
 
 async def load_cogs():
     # load cogs
