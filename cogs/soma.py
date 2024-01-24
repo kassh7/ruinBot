@@ -135,7 +135,13 @@ class soma(commands.Cog):
             cursor.execute("UPDATE soma SET wins = ? WHERE user = ? AND guild = ?", (wins + 1, user.id, ctx.guild.id))
             self.bot.db.commit()
         else:
-            print('win register problema van')
+            cursor = self.bot.db.cursor()
+            cursor.execute('''
+                            INSERT INTO soma (user, cooldown, guild, wins) 
+                            VALUES (?, ?, ?, ?);
+                            ''', (user.id, datetime.now(timezone.utc), ctx.guild.id, 1))
+            self.bot.db.commit()
+
 
 
 async def setup(bot):
