@@ -3,6 +3,7 @@ import random
 
 import ciso8601
 import discord
+import pytz
 import requests
 import time
 from datetime import datetime, timezone, timedelta
@@ -52,18 +53,21 @@ class soma(commands.Cog):
             elif isinstance(personal_cd, timedelta):
                 embed = discord.Embed(title="ne spamolj")
                 personal_cd = personal_cd+datetime.now()
+                personal_cd = personal_cd.replace(tzinfo=pytz.utc).astimezone(pytz.timezone('Europe/Budapest'))
                 embed.add_field(name="eddig várj még geci",
                                 value=f"{personal_cd.strftime("%H:%M:%S")}")
                 file = discord.File("res/angry.png")
                 embed.set_image(url="attachment://angry.png")
-                await ctx.send(file=file, embed=embed)
+                await ctx.send(file=file, embed=embed, delete_after=30)
+                await ctx.message.delete(delay=30)
             else:
                 embed = discord.Embed(title="nem kapta")
                 embed.add_field(name="te haltál", value="")
                 file = discord.File("res/kssz-orban-thumb.png")
                 embed.set_image(url="attachment://kssz-orban-thumb.png")
                 await self.incur_personal_cooldown(user, ctx)
-                await ctx.send(file=file, embed=embed)
+                await ctx.send(file=file, embed=embed, delete_after=30)
+                await ctx.message.delete(delay=30)
 
         except Exception as e:
             print(f"baj van: {e}")
