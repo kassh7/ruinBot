@@ -27,6 +27,10 @@ async def on_ready():
         'CREATE TABLE IF NOT EXISTS soma(user INTEGER UNIQUE, cooldown timestamp, guild INTEGER, wins INTEGER DEFAULT '
         '0 NOT NULL)')
     bot.db.commit()
+    cursor.execute(
+        'CREATE TABLE IF NOT EXISTS somacd(id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp DEFAULT CURRENT_TIMESTAMP, '
+        'winner INTEGER, cooldown timestamp)')
+    bot.db.commit()
 
     await bot.change_presence(activity=discord.Game('anyáddal'))
     print("na re")

@@ -47,12 +47,12 @@ class soma(commands.Cog):
                 res = r.json()
                 embed.add_field(name="az új szín:", value=f"{res['name']['value']}")
 
-                await self.make_cooldown_timestamp()
+                await self.make_cooldown_timestamp(ctx)
                 await self.register_win(user, ctx)
                 await ctx.send(file=file, embed=embed)
             elif isinstance(personal_cd, timedelta):
                 embed = discord.Embed(title="ne spamolj")
-                personal_cd = personal_cd+datetime.now()
+                personal_cd = personal_cd + datetime.now()
                 personal_cd = personal_cd.replace(tzinfo=pytz.utc).astimezone(pytz.timezone('Europe/Budapest'))
                 embed.add_field(name="eddig várj még geci",
                                 value=f"{personal_cd.strftime("%H:%M:%S")}")
@@ -93,6 +93,22 @@ class soma(commands.Cog):
             print(f"baj van: {e}")
             await ctx.send(f"baj van: {e}")
 
+    @commands.command(aliases=['lastwin'])
+    async def last_winner(self, ctx):
+        try:
+            cursor = self.bot.db.cursor()
+            cursor.execute("SELECT winner, timestamp FROM somacd ORDER BY id DESC LIMIT 1")
+            data = cursor.fetchone()
+            if data:
+                embed = discord.Embed(title="Somdler Listája")
+                embed.add_field(name="Legutolsó brusztolás időpontja:", value=f"{self.bot.get_user(data[0]).display_name} - {data[1]}")
+                await ctx.send(embed=embed)
+            else:
+                await ctx.send("ajaj")
+        except Exception as e:
+            print(f"baj van: {e}")
+            await ctx.send(f"baj van: {e}")
+
     async def check_cooldown(self, cooldown):
         current_time = datetime.now(timezone.utc)
         current_time = current_time.timetuple()
@@ -104,7 +120,7 @@ class soma(commands.Cog):
         else:
             return False
 
-    async def make_cooldown_timestamp(self):
+    async def make_cooldown_timestamp(self, ctx):
         cooldown_seconds = random.randint(432000, 691200)  # 5-8 days
         future_time = datetime.now(timezone.utc)
         future_time = future_time + timedelta(seconds=cooldown_seconds)
@@ -114,6 +130,9 @@ class soma(commands.Cog):
         with open(self.cd_path, 'w+') as f:
             f.write(str(future_time))
             f.close()
+            cursor = self.bot.db.cursor()
+            cursor.execute("INSERT INTO somacd (winner, cooldown) VALUES (?, ?)", (ctx.author.id, str(future_time)))
+            self.bot.db.commit()
 
     async def check_personal_cooldown(self, user, ctx):
         cursor = self.bot.db.cursor()
@@ -153,7 +172,6 @@ class soma(commands.Cog):
                             VALUES (?, ?, ?, ?);
                             ''', (user.id, datetime.now(timezone.utc), ctx.guild.id, 1))
             self.bot.db.commit()
-
 
 
 async def setup(bot):
