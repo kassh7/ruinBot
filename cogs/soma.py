@@ -100,8 +100,11 @@ class soma(commands.Cog):
             cursor.execute("SELECT winner, timestamp FROM somacd ORDER BY id DESC LIMIT 1")
             data = cursor.fetchone()
             if data:
-                embed = discord.Embed(title="Somdler Listája")
-                embed.add_field(name="Legutolsó brusztolás időpontja:", value=f"{self.bot.get_user(data[0]).display_name} - {data[1]}")
+                embed = discord.Embed(title="Legutolsó brusztolás időpontja:")
+                timestamp = datetime.strptime(data[1], '%Y-%m-%d %H:%M:%S')
+                timestamp = timestamp.replace(tzinfo=pytz.utc).astimezone(pytz.timezone('Europe/Budapest'))
+                embed.add_field(name=f"{self.bot.get_user(data[0]).display_name} - {timestamp.strftime("%Y-%m-%d %H:%M:%S")}"
+                                    , value="")
                 await ctx.send(embed=embed)
             else:
                 await ctx.send("ajaj")
