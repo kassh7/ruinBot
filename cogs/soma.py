@@ -32,7 +32,7 @@ class soma(commands.Cog):
             role = discord.utils.get(ctx.guild.roles, name="soma")
             user = ctx.author
             personal_cd = await self.check_personal_cooldown(user, ctx)
-            if role and await self.check_cooldown(cooldown) and personal_cd:
+            if role and await self.check_cooldown(cooldown) and personal_cd is True:
                 rgb = random.randint(0, 0xFFFFFF)
                 random_color = discord.Color(rgb)
                 await role.edit(color=random_color)
@@ -48,6 +48,14 @@ class soma(commands.Cog):
 
                 await self.make_cooldown_timestamp()
                 await self.register_win(user, ctx)
+                await ctx.send(file=file, embed=embed)
+            elif isinstance(personal_cd, timedelta):
+                embed = discord.Embed(title="ne spamolj")
+                personal_cd = personal_cd+datetime.now()
+                embed.add_field(name="eddig várj még geci",
+                                value=f"{personal_cd.strftime("%H:%M:%S")}")
+                file = discord.File("res/angry.png")
+                embed.set_image(url="attachment://angry.png")
                 await ctx.send(file=file, embed=embed)
             else:
                 embed = discord.Embed(title="nem kapta")
@@ -109,7 +117,7 @@ class soma(commands.Cog):
         data = cursor.fetchone()
         if data:
             if (datetime.now(timezone.utc) - ciso8601.parse_datetime(data[0])) < timedelta(hours=1):
-                return False
+                return timedelta(hours=1) - (datetime.now(timezone.utc) - ciso8601.parse_datetime(data[0]))
             else:
                 return True
         else:
