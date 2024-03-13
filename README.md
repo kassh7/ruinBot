@@ -6,4 +6,4 @@ Csinalsz magadnak discord botot meg tokent hozza https://discord.com/developers/
 Meghivod sajat szerverre  
 .envbe beirod a tokent meg egy channel idt ahova irja h na re az .env-example alapján  
 Requirementset felrakod  
-Elinditod a main.py-t  
+Elinditod a main.py-t 
