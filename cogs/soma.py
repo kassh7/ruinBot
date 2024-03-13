@@ -11,7 +11,7 @@ from PIL import Image
 from discord.ext import commands
 
 
-class soma(commands.Cog):
+class Soma(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.cd_path = 'usr/somacd.txt'
@@ -112,6 +112,7 @@ class soma(commands.Cog):
             print(f"baj van: {e}")
             await ctx.send(f"baj van: {e}")
 
+
     async def check_cooldown(self, cooldown):
         current_time = datetime.now(timezone.utc)
         current_time = current_time.timetuple()
@@ -178,4 +179,4 @@ class soma(commands.Cog):
 
 
 async def setup(bot):
-    await bot.add_cog(soma(bot))
+    await bot.add_cog(Soma(bot))
