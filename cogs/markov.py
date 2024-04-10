@@ -16,7 +16,7 @@ class Markov(commands.Cog):
     async def on_message(self, message):
         if not os.path.exists("usr/markov/"):
             os.mkdir("usr/markov/")
-        if "<@1197841378961543198>" in message.content:
+        if f"<@{self.bot.user.id}>" in message.content:
             await self.markov(message)
 
         if message.type == discord.MessageType.reply:
