@@ -41,7 +41,7 @@ class Markov(commands.Cog):
         if not self.text_model:
             self.text_model = markovify.NewlineText(text)
 
-        chance = randint(1,100)
+        chance = randint(1,10)
         if chance > 100:
             sentence = self.text_model.make_sentence()
         else:
