@@ -48,7 +48,7 @@ class Markov(commands.Cog):
         else:
             sentence = random.choice(urls)
 
-        await ctx.reply(sentence if sentence else "MIT MOND?", {"allowed_mentions": {"parse": []}})
+        await ctx.reply(sentence if sentence else "MIT MOND?")
 
 
 async def setup(bot):
