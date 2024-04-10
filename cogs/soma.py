@@ -47,6 +47,15 @@ class Soma(commands.Cog):
                 res = r.json()
                 embed.add_field(name="az új szín:", value=f"{res['name']['value']}")
 
+                on_cd_try, normal_try = await self.amount_of_tries(user.id)
+                total_try = on_cd_try + normal_try
+                embed.add_field(name=chr(173), value=chr(173))
+                embed.add_field(name="ennyiből lett meg:", value=f"{total_try}")
+                if on_cd_try > 0:
+                    embed.add_field(name="ennyiszer volt türelmetlen:", value=f"{on_cd_try}")
+
+                await self.count_try(user, 0, ctx)
+
                 await self.make_cooldown_timestamp(ctx)
                 await self.register_win(user, ctx)
                 await ctx.send(file=file, embed=embed)
@@ -58,6 +67,7 @@ class Soma(commands.Cog):
                                 value=f"{personal_cd.strftime("%H:%M:%S")}")
                 file = discord.File("res/angry.png")
                 embed.set_image(url="attachment://angry.png")
+                await self.count_try(user, 1, ctx)
                 await ctx.send(file=file, embed=embed, delete_after=30)
                 await ctx.message.delete(delay=30)
             else:
@@ -65,6 +75,7 @@ class Soma(commands.Cog):
                 embed.add_field(name="te haltál", value="")
                 file = discord.File("res/kssz-orban-thumb.png")
                 embed.set_image(url="attachment://kssz-orban-thumb.png")
+                await self.count_try(user, 0, ctx)
                 await self.incur_personal_cooldown(user, ctx)
                 await ctx.send(file=file, embed=embed, delete_after=30)
                 await ctx.message.delete(delay=30)
@@ -84,9 +95,12 @@ class Soma(commands.Cog):
             if data:
                 embed = discord.Embed(title="Somdler Listája")
                 field = ""
+                field2 = ""
                 for row in data:
-                    field = field + f"{self.bot.get_user(row[0]).display_name} - {row[1]} \n"
+                    field = field + f"{self.bot.get_user(row[0]).display_name} \n"
+                    field2 = field2 + f"{ row[1]} \n"
                 embed.add_field(name="Legjobban brusztolók:", value=field)
+                embed.add_field(name="‎", value=field2)
 
                 await ctx.send(embed=embed)
         except Exception as e:
@@ -103,8 +117,9 @@ class Soma(commands.Cog):
                 embed = discord.Embed(title="Legutolsó brusztolás időpontja:")
                 timestamp = datetime.strptime(data[1], '%Y-%m-%d %H:%M:%S')
                 timestamp = timestamp.replace(tzinfo=pytz.utc).astimezone(pytz.timezone('Europe/Budapest'))
-                embed.add_field(name=f"{self.bot.get_user(data[0]).display_name} - {timestamp.strftime("%Y-%m-%d %H:%M:%S")}"
-                                    , value="")
+                embed.add_field(
+                    name=f"{self.bot.get_user(data[0]).display_name} - {timestamp.strftime("%Y-%m-%d %H:%M:%S")}"
+                    , value="")
                 await ctx.send(embed=embed)
             else:
                 await ctx.send("ajaj")
@@ -112,6 +127,39 @@ class Soma(commands.Cog):
             print(f"baj van: {e}")
             await ctx.send(f"baj van: {e}")
 
+    @commands.command(aliases=['somatrylb'])
+    async def tries_leaderboard(self, ctx):
+        try:
+            cursor = self.bot.db.cursor()
+            cursor.execute('''
+                        SELECT 
+                            user,
+                            SUM(CASE WHEN on_personal = 1 THEN 1 ELSE 0 END) AS on_personal,
+                            SUM(CASE WHEN on_personal = 0 THEN 1 ELSE 0 END) AS normal_try
+                        FROM 
+                            soma_tries
+                        GROUP BY 
+                            user;
+                            ''')
+            data = cursor.fetchall()
+
+            if data:
+                embed = discord.Embed(title="Legjobban botolók:")
+                field = ""
+                field2 = ""
+                field3 = ""
+                for row in data:
+                    field = field + f"{self.bot.get_user(row[0]).display_name} \n"
+                    field2 = field2 + f"{ row[1] } \n"
+                    field3 = field3 + f"{ row[2] } \n"
+                embed.add_field(name="Ki?", value=field)
+                embed.add_field(name="Türelem", value=field2)
+                embed.add_field(name="Türelmetlen", value=field3)
+
+                await ctx.send(embed=embed)
+        except Exception as e:
+            print(f"baj van: {e}")
+            await ctx.send(f"baj van: {e}")
 
     async def check_cooldown(self, cooldown):
         current_time = datetime.now(timezone.utc)
@@ -176,6 +224,31 @@ class Soma(commands.Cog):
                             VALUES (?, ?, ?, ?);
                             ''', (user.id, datetime.now(timezone.utc), ctx.guild.id, 1))
             self.bot.db.commit()
+
+    async def count_try(self, user, cd, ctx):
+        cursor = self.bot.db.cursor()
+        cursor.execute('''
+                            INSERT INTO soma_tries (user, on_personal, timestamp) 
+                            VALUES (?, ?, ?);
+                            ''', (user.id, cd, datetime.now(timezone.utc)))
+        self.bot.db.commit()
+
+    async def amount_of_tries(self, user):
+        cursor = self.bot.db.cursor()
+        cursor.execute("SELECT timestamp FROM somacd ORDER BY id DESC LIMIT 1")
+        data = cursor.fetchone()
+        if data:
+            cooldown = data[0]
+            cursor = self.bot.db.cursor()
+            cursor.execute("SELECT count(id) FROM soma_tries WHERE user = ? AND timestamp > ? AND on_personal = 1",
+                           (user, cooldown))
+            on_personal = cursor.fetchone()[0]
+
+            cursor = self.bot.db.cursor()
+            cursor.execute("SELECT count(id) FROM soma_tries WHERE user = ? AND timestamp > ? AND on_personal = 0",
+                           (user, cooldown))
+            normal = cursor.fetchone()[0]
+            return on_personal, normal
 
 
 async def setup(bot):
