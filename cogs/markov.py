@@ -16,6 +16,15 @@ class Markov(commands.Cog):
     async def on_message(self, message):
         if not os.path.exists("usr/markov/"):
             os.mkdir("usr/markov/")
+        if "<@1197841378961543198>" in message.content:
+            await self.markov(message)
+
+        if message.type == discord.MessageType.reply:
+            reference = await message.channel.fetch_message(
+                message.reference.message_id)
+
+            if reference.author.id == self.bot.user.id:
+                await self.markov(message)
         start_filters = ("$", "r!", "<@1197841378961543198>", "<@1194709611077435466>")
         if message.author.bot or not message.content or message.content.startswith(start_filters):
             return

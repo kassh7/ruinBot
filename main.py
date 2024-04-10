@@ -16,7 +16,8 @@ cogs_dir = "cogs"
 
 intents = discord.Intents.all()
 intents.members = True
-bot = commands.Bot(command_prefix="r!", intents=intents, help_command=None)
+bot = commands.Bot(command_prefix="r!", intents=intents, help_command=None,
+                   allowed_mentions=discord.AllowedMentions(roles=False, users=False, everyone=False))
 
 
 @bot.event
