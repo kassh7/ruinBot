@@ -16,17 +16,18 @@ class Markov(commands.Cog):
     async def on_message(self, message):
         if not os.path.exists("usr/markov/"):
             os.mkdir("usr/markov/")
-        if message.author.bot or not message.content or message.content.startswith("$") or message.content.startswith("r!"):
+        start_filters = ("$", "r!", "<@1197841378961543198>", "<@1194709611077435466>")
+        if message.author.bot or not message.content or message.content.startswith(start_filters):
             return
         if message.content.startswith("https://"):
             embeds = [".gif", ".mp4", ".png", ".gif", ".gifv", ".webm", ".jpg", ".jpeg", "tenor.com" ]
             if any(ext in message.content for ext in embeds):
                 with open(f"usr/markov/urls.txt", "a", encoding='utf-8') as f:
                     f.write(message.content + "\n")
-        else:
-            with open(f"usr/markov/{message.channel}.txt", "a", encoding='utf-8') as f:
-                f.write(message.content + "\n")
+            return
 
+        with open(f"usr/markov/{message.channel}.txt", "a", encoding='utf-8') as f:
+            f.write(message.content + "\n")
 
     @commands.command(aliases=['mark'])
     async def markov(self, ctx):
@@ -41,13 +42,13 @@ class Markov(commands.Cog):
         if not self.text_model:
             self.text_model = markovify.NewlineText(text)
 
-        chance = randint(1,10)
-        if chance > 100:
+        chance = randint(1,100)
+        if chance > 10:
             sentence = self.text_model.make_sentence()
         else:
             sentence = random.choice(urls)
 
-        await ctx.reply(sentence if sentence else "MIT MOND?")
+        await ctx.reply(sentence if sentence else "MIT MOND?", {"allowed_mentions": {"parse": []}})
 
 
 async def setup(bot):
