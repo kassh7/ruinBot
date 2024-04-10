@@ -150,8 +150,8 @@ class Soma(commands.Cog):
                 field3 = ""
                 for row in data:
                     field = field + f"{self.bot.get_user(row[0]).display_name} \n"
-                    field2 = field2 + f"{ row[1] } \n"
-                    field3 = field3 + f"{ row[2] } \n"
+                    field2 = field2 + f"{ row[2] } \n"
+                    field3 = field3 + f"{ row[1] } \n"
                 embed.add_field(name="Ki?", value=field)
                 embed.add_field(name="Türelem", value=field2)
                 embed.add_field(name="Türelmetlen", value=field3)
