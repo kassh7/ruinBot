@@ -39,6 +39,7 @@ async def on_ready():
     bot.db.commit()
 
     await bot.change_presence(activity=discord.Game('anyáddal'))
+    await bot.tree.sync(guild=discord.Object(id=232227916036046849))
     print("na re")
     kodolo_chan = bot.get_channel(int(NARE))
     await kodolo_chan.send("na re")
