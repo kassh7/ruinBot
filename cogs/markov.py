@@ -49,11 +49,11 @@ class Markov(commands.Cog):
                     text = text+f.read()
 
         if not self.text_model:
-            self.text_model = markovify.NewlineText(text)
+            self.text_model = markovify.NewlineText(text, state_size=2)
 
         chance = randint(1,100)
         if chance > 10:
-            sentence = self.text_model.make_sentence()
+            sentence = self.text_model.make_sentence(tries=100)
         else:
             sentence = random.choice(urls)
 
