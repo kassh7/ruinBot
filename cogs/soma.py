@@ -139,7 +139,9 @@ class Soma(commands.Cog):
                         FROM 
                             soma_tries
                         GROUP BY 
-                            user;
+                            user
+                        ORDER BY 
+                            normal_try desc;
                             ''')
             data = cursor.fetchall()
 
