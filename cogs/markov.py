@@ -79,7 +79,6 @@ class Markov(commands.Cog):
 
     @commands.hybrid_command(name="config", with_app_command=True,
                              description="Change the markov config (state_size, tries)")
-    @app_commands.guilds(discord.Object(id=232227916036046849))
     @app_commands.describe(config_name='state_size or tries')
     async def markov_config(self, ctx, config_name: str, value: int):
         if config_name in ("state_size", "tries"):
@@ -92,7 +91,6 @@ class Markov(commands.Cog):
 
     @commands.hybrid_command(name="markovpic", with_app_command=True,
                              description="Generates an image with generated text")
-    @app_commands.guilds(discord.Object(id=232227916036046849))
     async def markov_pic(self, ctx):
         try:
             text = ""
