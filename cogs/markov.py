@@ -1,6 +1,6 @@
 import json
 import random
-import urllib.parse
+import re
 from random import randint
 
 import discord
@@ -116,6 +116,13 @@ class Markov(commands.Cog):
             }
             for x in range(meme['box_count']):
                 sentence = self.text_model.make_sentence(tries=self.config["tries"])
+                # replace tags with names because images
+                pattern = r'<@(\d{17,18})>' # matches discord tags
+                matches = re.findall(pattern, sentence)
+                for match in matches:
+                    print(match)
+                    username = self.bot.get_user(int(match)).display_name
+                    sentence = sentence.replace(f'<@{match}>', str(username))
                 post_json.update({"boxes[{}][text]".format(x): sentence if sentence else "MIT MOND?"})
 
             r = requests.post("https://api.imgflip.com/caption_image", data=post_json)
