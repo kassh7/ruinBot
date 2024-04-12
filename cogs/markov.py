@@ -1,10 +1,12 @@
 import json
 import random
+import urllib.parse
 from random import randint
 
 import discord
 import os
 
+import requests
 from discord import app_commands
 from discord.ext import commands
 import markovify
@@ -30,6 +32,8 @@ class Markov(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message):
+        if message.author.bot or not message.content:
+            return
         if f"<@{self.bot.user.id}>" in message.content:
             await self.markov(message)
 
@@ -40,7 +44,7 @@ class Markov(commands.Cog):
             if reference.author.id == self.bot.user.id:
                 await self.markov(message)
         start_filters = ("$", "r!", "<@1197841378961543198>", "<@1194709611077435466>")
-        if message.author.bot or not message.content or message.content.startswith(start_filters):
+        if message.content.startswith(start_filters):
             return
         if message.content.startswith("https://"):
             embeds = [".gif", ".mp4", ".png", ".gif", ".gifv", ".webm", ".jpg", ".jpeg", "tenor.com"]
@@ -85,6 +89,47 @@ class Markov(commands.Cog):
                 json.dump(self.config, file)
         else:
             await ctx.send("Invalid config name")
+
+    @commands.hybrid_command(name="markovpic", with_app_command=True,
+                             description="Generates an image with generated text")
+    @app_commands.guilds(discord.Object(id=232227916036046849))
+    async def markov_pic(self, ctx):
+        try:
+            text = ""
+            for filename in os.listdir("usr/markov/"):
+                with open(os.path.join("usr/markov/", filename), 'r', encoding='utf-8') as f:
+                    if filename == "urls.txt":
+                        continue
+                    else:
+                        text = text + f.read()
+
+            if not self.text_model:
+                self.text_model = markovify.NewlineText(text, state_size=self.config["state_size"])
+
+            boxes = []
+            r = requests.get("https://api.imgflip.com/get_memes")
+            memes = r.json()
+            meme_num = randint(0, 99)
+            meme = memes["data"]["memes"][meme_num]
+            post_json = {
+                "template_id": meme["id"],
+                "username": os.getenv("IMGFLIP_USER"),
+                "password": os.getenv("IMGFLIP_PASS"),
+            }
+            for x in range(meme['box_count']):
+                sentence = self.text_model.make_sentence(tries=self.config["tries"])
+                post_json.update({"boxes[{}][text]".format(x): sentence if sentence else "MIT MOND?"})
+
+            r = requests.post("https://api.imgflip.com/caption_image", data=post_json)
+            meme_pic = r.json()
+            if meme_pic["success"]:
+                await ctx.reply(meme_pic["data"]["url"])
+            else:
+                await ctx.reply(f"imgflip szar: \n {meme_pic['error_message']}")
+
+        except Exception as e:
+            print(f"baj van: {e}")
+            await ctx.send(f"baj van: {e}")
 
 
 async def setup(bot):
