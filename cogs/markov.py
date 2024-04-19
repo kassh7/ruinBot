@@ -12,6 +12,16 @@ from discord.ext import commands
 import markovify
 
 
+def check_and_set_defaults(config):
+    defaults = dict(state_size=1, tries=100, test_output=False, min_words=1)
+
+    for key, default_value in defaults.items():
+        if key not in config:
+            config[key] = default_value
+
+    return config
+
+
 class Markov(commands.Cog):
     def __init__(self, bot):
         self.text_model = None
@@ -23,12 +33,10 @@ class Markov(commands.Cog):
             with open("usr/markov_config.json", "r", encoding='utf-8') as f:
                 self.config = json.load(f)
         except FileNotFoundError:
-            self.config = {
-                "state_size": 1,
-                "tries": 100
-            }
+            self.config = check_and_set_defaults([])
             with open("usr/markov_config.json", "w") as file:
                 json.dump(self.config, file)
+        self.config = check_and_set_defaults(self.config)
 
     @commands.Cog.listener()
     async def on_message(self, message):

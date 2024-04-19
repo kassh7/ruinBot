@@ -128,7 +128,7 @@ class Soma(commands.Cog):
             await ctx.send(f"baj van: {e}")
 
     @commands.command(aliases=['somatrylb'])
-    async def tries_leaderboard(self, ctx):
+    async def tries_leaderboard(self, ctx, last=None):
         try:
             cursor = self.bot.db.cursor()
             cursor.execute('''
@@ -226,6 +226,12 @@ class Soma(commands.Cog):
                             VALUES (?, ?, ?, ?);
                             ''', (user.id, datetime.now(timezone.utc), ctx.guild.id, 1))
             self.bot.db.commit()
+        cursor = self.bot.db.cursor()
+        cursor.execute('''
+                        INSERT INTO soma_wins (user_id, timestamp) 
+                        VALUES (?, ?);
+                        ''', (user.id, datetime.now(timezone.utc)))
+        self.bot.db.commit()
 
     async def count_try(self, user, cd, ctx):
         cursor = self.bot.db.cursor()

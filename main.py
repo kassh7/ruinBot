@@ -37,6 +37,10 @@ async def on_ready():
         '(id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp DEFAULT CURRENT_TIMESTAMP, '
         'on_personal INTEGER, user INTEGER)')
     bot.db.commit()
+    cursor.execute(
+        'CREATE TABLE IF NOT EXISTS soma_wins'
+        '(id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp DEFAULT CURRENT_TIMESTAMP, user_id INTEGER)')
+    bot.db.commit()
 
     await bot.change_presence(activity=discord.Game('anyáddal'))
     await bot.tree.sync(guild=discord.Object(id=232227916036046849))
