@@ -131,6 +131,14 @@ class Soma(commands.Cog):
     async def tries_leaderboard(self, ctx, last=None):
         try:
             cursor = self.bot.db.cursor()
+            cursor.execute("SELECT timestamp FROM soma_wins ORDER BY timestamp DESC LIMIT 2")
+            data = cursor.fetchall()
+
+            if len(data) > 1 and last == "last":
+                timestamp = data[1]
+            else:
+                timestamp = ("2020-01-01 00:00:00",)
+
             cursor.execute('''
                         SELECT 
                             user,
@@ -138,15 +146,22 @@ class Soma(commands.Cog):
                             SUM(CASE WHEN on_personal = 0 THEN 1 ELSE 0 END) AS normal_try
                         FROM 
                             soma_tries
+                        WHERE
+                            timestamp > ?
                         GROUP BY 
                             user
                         ORDER BY 
                             normal_try desc;
-                            ''')
+                            ''', timestamp)
             data = cursor.fetchall()
 
             if data:
                 embed = discord.Embed(title="Legjobban botolók:")
+                if last == "last":
+                    print(timestamp[0])
+                    timestampu = datetime.strptime(timestamp[0], '%Y-%m-%d %H:%M:%S')
+                    timestampu = timestampu.replace(tzinfo=pytz.utc).astimezone(pytz.timezone('Europe/Budapest'))
+                    embed.set_footer(text=f"{timestampu.strftime("%Y-%m-%d %H:%M:%S")} óta")
                 field = ""
                 field2 = ""
                 field3 = ""
@@ -159,6 +174,8 @@ class Soma(commands.Cog):
                 embed.add_field(name="Türelmetlen", value=field3)
 
                 await ctx.send(embed=embed)
+            else:
+                await ctx.send("No tries since last win date or no wins recorded yet")
         except Exception as e:
             print(f"baj van: {e}")
             await ctx.send(f"baj van: {e}")
