@@ -43,7 +43,7 @@ class Markov(commands.Cog):
         if message.author.bot or not message.content:
             return
         if f"<@{self.bot.user.id}>" in message.content:
-            await self.markov(message)
+            await self.markov(message, seed=message.content)
 
         if message.type == discord.MessageType.reply:
             reference = await message.channel.fetch_message(
@@ -54,7 +54,12 @@ class Markov(commands.Cog):
         start_filters = ("$", "r!", "<@1197841378961543198>", "<@1194709611077435466>")
         if message.content.startswith(start_filters):
             return
-        if message.content.startswith("https://"):
+
+        # Regular expression to match URLs
+        url_pattern = re.compile(r'https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+')
+
+        # Check if the string contains a URL
+        if re.search(url_pattern, message.content):
             embeds = [".gif", ".mp4", ".png", ".gif", ".gifv", ".webm", ".jpg", ".jpeg", "tenor.com"]
             if any(ext in message.content for ext in embeds):
                 with open(f"usr/markov/urls.txt", "a", encoding='utf-8') as f:
@@ -65,25 +70,31 @@ class Markov(commands.Cog):
             f.write(message.content + "\n")
 
     @commands.command(aliases=['mark'])
-    async def markov(self, ctx):
-        text = ""
-        for filename in os.listdir("usr/markov/"):
-            with open(os.path.join("usr/markov/", filename), 'r', encoding='utf-8') as f:
-                if filename == "urls.txt":
-                    urls = f.readlines()
-                else:
-                    text = text + f.read()
+    async def markov(self, ctx, seed=None):
+        try:
+            text = ""
+            for filename in os.listdir("usr/markov/"):
+                with open(os.path.join("usr/markov/", filename), 'r', encoding='utf-8') as f:
+                    if filename == "urls.txt":
+                        urls = f.readlines()
+                    else:
+                        text = text + f.read()
 
-        if not self.text_model:
-            self.text_model = markovify.NewlineText(text, state_size=self.config["state_size"])
+            if not self.text_model:
+                self.text_model = markovify.NewlineText(text, state_size=self.config["state_size"])
 
-        chance = randint(1, 100)
-        if chance > 10:
-            sentence = self.text_model.make_sentence(tries=self.config["tries"])
-        else:
-            sentence = random.choice(urls)
+            chance = randint(1, 100)
+            if chance > 10:
+                sentence = self.text_model.make_sentence(tries=self.config["tries"],
+                                                         test_output=self.config["test_output"],
+                                                         min_words=self.config["min_words"])
+            else:
+                sentence = random.choice(urls)
 
-        await ctx.reply(sentence if sentence else "MIT MOND?")
+            await ctx.reply(sentence if sentence else "MIT MOND?")
+        except Exception as e:
+            print(f"baj van: {e}")
+            await ctx.send(f"baj van: {e}")
 
     @commands.hybrid_command(name="config", with_app_command=True,
                              description="Change the markov config (state_size, tries)")
@@ -123,7 +134,9 @@ class Markov(commands.Cog):
                 "password": os.getenv("IMGFLIP_PASS"),
             }
             for x in range(meme['box_count']):
-                sentence = self.text_model.make_sentence(tries=self.config["tries"])
+                sentence = self.text_model.make_sentence(tries=self.config["tries"], max_words=10,
+                                                         test_output=self.config["test_output"],
+                                                         min_words=self.config["min_words"])
                 # replace tags with names because images
                 pattern = r'<@(\d{17,18})>' # matches discord tags
                 matches = re.findall(pattern, sentence)
