@@ -150,8 +150,8 @@ class Markov(commands.Cog):
 
             # Add text
             draw = ImageDraw.Draw(template)
-            font1 = ImageFont.truetype("arial.ttf", 45)
-            font2 = ImageFont.truetype("arial.ttf", 30)
+            font1 = ImageFont.truetype("res/DejaVuSans.ttf", 45)
+            font2 = ImageFont.truetype("res/DejaVuSans.ttf", 30)
             text1 = await self.make_sentence(10, fix_tags=True)
             text2 = await self.make_sentence(10, fix_tags=True)
             lines1 = textwrap.wrap(text1, width=30)
