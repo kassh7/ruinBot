@@ -8,6 +8,7 @@ import requests
 import time
 from datetime import datetime, timezone, timedelta
 from PIL import Image
+from discord import app_commands
 from discord.ext import commands
 
 
@@ -24,7 +25,8 @@ class Soma(commands.Cog):
         else:
             print(f"File '{self.cd_path}' already exists.")
 
-    @commands.command(aliases=['soma'])
+    @commands.hybrid_command(name="soma", with_app_command=True,
+                             description="Nemes bátorsággal és hevességgel pörgesd a szerencse kerekét.")
     async def soma_color(self, ctx):
         try:
             file = open(self.cd_path, 'r')
@@ -84,7 +86,8 @@ class Soma(commands.Cog):
             print(f"baj van: {e}")
             await ctx.send(f"baj van: {e}")
 
-    @commands.command(aliases=['somalb'])
+    @commands.hybrid_command(name="somalb", with_app_command=True,
+                             description="Legjobban brusztolók tabellája")
     async def soma_leaderboard(self, ctx):
         try:
             cursor = self.bot.db.cursor()
@@ -107,7 +110,8 @@ class Soma(commands.Cog):
             print(f"baj van: {e}")
             await ctx.send(f"baj van: {e}")
 
-    @commands.command(aliases=['lastwin'])
+    @commands.hybrid_command(name="lastwin", with_app_command=True,
+                             description="Ki nyert utoljára?")
     async def last_winner(self, ctx):
         try:
             cursor = self.bot.db.cursor()
@@ -127,41 +131,59 @@ class Soma(commands.Cog):
             print(f"baj van: {e}")
             await ctx.send(f"baj van: {e}")
 
-    @commands.command(aliases=['somatrylb'])
-    async def tries_leaderboard(self, ctx, last=None):
+    @commands.hybrid_command(name="somatrylb", with_app_command=True,
+                             description="Nézd meg Zopy mennyire botolt egy körben")
+    @app_commands.describe(which='last vagy current')
+    async def tries_leaderboard(self, ctx, which=None):
         try:
+            if which not in ['last', 'current']:
+                which = None
             cursor = self.bot.db.cursor()
             cursor.execute("SELECT timestamp FROM soma_wins ORDER BY timestamp DESC LIMIT 2")
             data = cursor.fetchall()
-
-            if len(data) > 1 and last == "last":
-                timestamp = data[1]
-            else:
-                timestamp = ("2020-01-01 00:00:00",)
-
-            cursor.execute('''
+            sql = '''
                         SELECT 
                             user,
                             SUM(CASE WHEN on_personal = 1 THEN 1 ELSE 0 END) AS on_personal,
                             SUM(CASE WHEN on_personal = 0 THEN 1 ELSE 0 END) AS normal_try
                         FROM 
                             soma_tries
+                    '''
+            if len(data) > 1 and which is not None:
+                if which == "last":
+                    timestamp = (datetime.strptime(data[1][0], "%Y-%m-%d %H:%M:%S.%f%z").strftime("%Y-%m-%d %H:%M:%S")
+                                 , datetime.strptime(data[0][0], "%Y-%m-%d %H:%M:%S.%f%z").strftime("%Y-%m-%d %H:%M:%S"))
+                    sql += '''
+                        WHERE
+                            timestamp > ? AND
+                            timestamp < ?
+                            '''
+                elif which == "current":
+                    timestamp = (datetime.strptime(data[0][0], "%Y-%m-%d %H:%M:%S.%f%z").strftime("%Y-%m-%d %H:%M:%S"),)
+                    sql += '''
                         WHERE
                             timestamp > ?
+                            '''
+            else:
+                timestamp = ("2020-01-01 00:00:00",)
+                sql += '''
+                        WHERE
+                            timestamp > ?
+                        '''
+
+            sql += '''
                         GROUP BY 
                             user
                         ORDER BY 
                             normal_try desc;
-                            ''', timestamp)
+                    '''
+            cursor.execute(sql, timestamp)
             data = cursor.fetchall()
 
             if data:
                 embed = discord.Embed(title="Legjobban botolók:")
-                if last == "last":
-                    print(timestamp[0])
-                    timestampu = datetime.strptime(timestamp[0], '%Y-%m-%d %H:%M:%S')
-                    timestampu = timestampu.replace(tzinfo=pytz.utc).astimezone(pytz.timezone('Europe/Budapest'))
-                    embed.set_footer(text=f"{timestampu.strftime("%Y-%m-%d %H:%M:%S")} óta")
+                if which is not None:
+                    embed.set_footer(text=("Az előző kör" if which=="last" else "Mostani kör"))
                 field = ""
                 field2 = ""
                 field3 = ""
@@ -175,7 +197,7 @@ class Soma(commands.Cog):
 
                 await ctx.send(embed=embed)
             else:
-                await ctx.send("No tries since last win date or no wins recorded yet")
+                await ctx.send("No tries since provided parameter or no wins recorded yet")
         except Exception as e:
             print(f"baj van: {e}")
             await ctx.send(f"baj van: {e}")
