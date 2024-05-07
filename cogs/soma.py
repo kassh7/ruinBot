@@ -25,14 +25,14 @@ class Soma(commands.Cog):
         else:
             print(f"File '{self.cd_path}' already exists.")
 
-    @commands.hybrid_command(name="soma", with_app_command=True,
+    @commands.hybrid_command(name="ruin", with_app_command=True,
                              description="Nemes bátorsággal és hevességgel pörgesd a szerencse kerekét.")
     async def soma_color(self, ctx):
         try:
             file = open(self.cd_path, 'r')
             cooldown = str(file.readline())
             file.close()
-            role = discord.utils.get(ctx.guild.roles, name="soma")
+            role = discord.utils.get(ctx.guild.roles, name="ruinbot")
             user = ctx.author
             personal_cd = await self.check_personal_cooldown(user, ctx)
             if role and await self.check_cooldown(cooldown) and personal_cd is True:
@@ -86,7 +86,7 @@ class Soma(commands.Cog):
             print(f"baj van: {e}")
             await ctx.send(f"baj van: {e}")
 
-    @commands.hybrid_command(name="somalb", with_app_command=True,
+    @commands.hybrid_command(name="ruinlb", with_app_command=True,
                              description="Legjobban brusztolók tabellája")
     async def soma_leaderboard(self, ctx):
         try:
@@ -131,7 +131,7 @@ class Soma(commands.Cog):
             print(f"baj van: {e}")
             await ctx.send(f"baj van: {e}")
 
-    @commands.hybrid_command(name="somatrylb", with_app_command=True,
+    @commands.hybrid_command(name="ruintrylb", with_app_command=True,
                              description="Nézd meg Zopy mennyire botolt egy körben")
     @app_commands.describe(which='last vagy current')
     async def tries_leaderboard(self, ctx, which=None):
