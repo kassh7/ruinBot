@@ -22,35 +22,40 @@ class ping(commands.Cog):
             do bist stollen
             synchronizes slash commands with server
         """
-        await ctx.message.delete()
-        if not guilds:
-            if spec == "~":
-                synced = await ctx.bot.tree.sync(guild=ctx.guild)
-            elif spec == "*":
-                ctx.bot.tree.copy_global_to(guild=ctx.guild)
-                synced = await ctx.bot.tree.sync(guild=ctx.guild)
-            elif spec == "^":
-                ctx.bot.tree.clear_commands(guild=ctx.guild)
-                await ctx.bot.tree.sync(guild=ctx.guild)
-                synced = []
-            else:
-                synced = await ctx.bot.tree.sync()
+        try:
+            await ctx.message.delete()
+            if not guilds:
+                if spec == "~":
+                    synced = await ctx.bot.tree.sync(guild=ctx.guild)
+                elif spec == "*":
+                    ctx.bot.tree.copy_global_to(guild=ctx.guild)
+                    synced = await ctx.bot.tree.sync(guild=ctx.guild)
+                elif spec == "^":
+                    ctx.bot.tree.clear_commands(guild=ctx.guild)
+                    await ctx.bot.tree.sync(guild=ctx.guild)
+                    synced = []
+                else:
+                    synced = await ctx.bot.tree.sync()
 
-            await ctx.send(
-                f"{len(synced)} trükköt tud a báttya{'!' if spec is None else '!?'}"
-            )
-            return
+                await ctx.send(
+                    f"{len(synced)} trükköt tud a báttya{'!' if spec is None else '!?'}"
+                )
+                return
 
-        ret = 0
-        for guild in guilds:
-            try:
-                await ctx.bot.tree.sync(guild=guild)
-            except discord.HTTPException:
-                pass
-            else:
-                ret += 1
+            ret = 0
+            for guild in guilds:
+                try:
+                    await ctx.bot.tree.sync(guild=guild)
+                except discord.HTTPException:
+                    pass
+                else:
+                    ret += 1
 
-        await ctx.send(f"tanit a báttya {ret}/{len(guilds)}.")
+            await ctx.send(f"tanit a báttya {ret}/{len(guilds)}.")
+
+        except Exception as e:
+            print(f"baj van: {e}")
+            await ctx.send(f"baj van: {e}")
 
 
 async def setup(bot):

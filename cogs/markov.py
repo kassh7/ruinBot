@@ -157,8 +157,8 @@ class Markov(commands.Cog):
             lines1 = textwrap.wrap(text1, width=30)
             lines2 = textwrap.wrap(text2, width=45)
 
-            text1_y = 470 if len(lines1) is 1 else 455
-            text2_y = 540 if len(lines2) is 1 else 530
+            text1_y = 470 if len(lines1) == 1 else 455
+            text2_y = 540 if len(lines2) == 1 else 530
 
             # Write text onto the template 466 , 511
             for i in range(len(lines1)):

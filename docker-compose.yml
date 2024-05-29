@@ -2,6 +2,7 @@ services:
   bot:
     container_name: bot
     image: ghcr.io/kassh7/ruinbot:latest
+    restart: unless-stopped
     volumes:
       - /root/ruinbotvolume/usr:/app/usr
       - /root/ruinbotvolume/.env:/app/.env
