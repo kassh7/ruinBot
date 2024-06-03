@@ -7,3 +7,4 @@ ciso8601~=2.3.1
 six~=1.16.0
 pytz~=2023.4
 markovify~=0.9.4
+beautifulsoup4~=4.12.3
