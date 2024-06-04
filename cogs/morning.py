@@ -91,7 +91,7 @@ class morning(commands.Cog):
 
             embed.add_field(name="Mai névnapok :partying_face: ", value=names_string, inline=False)
             if weather['current_temperature']:
-                embed.add_field(name="Időjárás :partly_sunny: ", value=weather['current_temperature'])
+                embed.add_field(name="Jelenlegi hőmérséklet :thermometer:  ", value=weather['current_temperature'])
             if weather['what_to_wear']:
                 embed.add_field(name="Mit vegyél fel? :womans_clothes: ", value=weather['what_to_wear'])
             await morning_channel.send(embed=embed)
