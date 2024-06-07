@@ -46,6 +46,26 @@ async def scrape():
         }
 
 
+async def generate_day():
+    current_date = datetime.datetime.now()
+    day_eng = current_date.strftime('%A')
+    day_translation = {
+        "Monday": "Hétfő",
+        "Tuesday": "Kedd",
+        "Wednesday": "Szerda",
+        "Thursday": "Csütörtök",
+        "Friday": "Péntek",
+        "Saturday": "Szombat",
+        "Sunday": "Vasárnap"
+    }
+    day = day_translation.get(day_eng)
+
+    adjective_json = json.load(open('res/adjective.json', "r", encoding='utf-8'))
+    adjective = random.choice(adjective_json[day[0].lower()])
+    day_name = f"{adjective.capitalize()} {day}"
+    return day_name
+
+
 async def send_morning_message(channel):
     morning_json = json.load(open('res/morning.json', "r", encoding='utf-8'))
     random.seed(str(datetime.date.today()))
@@ -74,6 +94,7 @@ async def send_morning_message(channel):
     if weather['alert']:
         embed.add_field(name=chr(173), value=chr(173))
         embed.add_field(name="Figyelmeztetés :exclamation: ", value=weather['alert'], inline=False)
+    embed.add_field(name=f"Ma {await generate_day()} van.", value="")
     await channel.send(embed=embed)
 
 
