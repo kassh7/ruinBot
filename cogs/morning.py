@@ -94,7 +94,7 @@ async def send_morning_message(channel):
     if weather['alert']:
         embed.add_field(name=chr(173), value=chr(173))
         embed.add_field(name="Figyelmeztetés :exclamation: ", value=weather['alert'], inline=False)
-    embed.add_field(name=f"Ma {await generate_day()} van.", value="")
+    embed.add_field(name=f"Ma {await generate_day()} van.", value="", inline=False)
     await channel.send(embed=embed)
 
 
