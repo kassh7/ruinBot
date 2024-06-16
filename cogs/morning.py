@@ -91,8 +91,8 @@ async def send_morning_message(channel):
         embed.add_field(name="Max :thermometer:", value=f"{weather['daily_max_temperature']}˚C", inline=True)
     if weather['what_to_wear']:
         embed.add_field(name="Mit vegyél fel? :womans_clothes:", value=weather['what_to_wear'], inline=True)
+    embed.add_field(name=chr(173), value=chr(173))
     if weather['alert']:
-        embed.add_field(name=chr(173), value=chr(173))
         embed.add_field(name="Figyelmeztetés :exclamation: ", value=weather['alert'], inline=False)
     embed.add_field(name=f"Ma {await generate_day()} van.", value="", inline=False)
     await channel.send(embed=embed)
