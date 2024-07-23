@@ -42,7 +42,7 @@ async def scrape():
             'current_temperature': "".join(current_temperature),
             'current_weather': "".join(current_weather),
             'daily_max_temperature': "".join(daily_max_temperature),
-            'alert': "".join(alert)
+            'alert': "; ".join(alert)
         }
 
 
