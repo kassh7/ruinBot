@@ -62,6 +62,8 @@ async def generate_day():
 
     adjective_json = json.load(open('res/adjective.json', "r", encoding='utf-8'))
     adjective = random.choice(adjective_json[day[0].lower()])
+    if datetime.datetime.now().date() == datetime.datetime.strptime(os.getenv("SPECIAL_DATE", ""), "%Y-%m-%d").date():
+        adjective = os.getenv("SPECIAL_ADJECTIVE")
     day_name = f"{adjective.capitalize()} {day}"
     return day_name
 
