@@ -92,21 +92,23 @@ class Util(commands.Cog):
         }
         response = requests.post(self.restart_url, headers=headers, json={})
         if response.status_code == 204:
-            return "Zenebot successfully restarted. Miracles do happen."
+            return "Kozelbot successfully restarted. Miracles do happen."
         else:
             raise Exception(
-                f"Failed to restart Zenebot. Response: {response.status_code}, {response.text}. What a shocker.")
+                f"Failed to restart Kozelbot. Response: {response.status_code}, {response.text}. What a shocker.")
 
-    # Usage example
     @commands.hybrid_command(name="kozel", with_app_command=True,
                              description="kozelbot újraindítós")
     async def restart_kozel(self,ctx):
         try:
+            status_message = await ctx.reply("Restarting Kozelbot... This might take a while.")
             await self.get_token()
-            await ctx.reply(await self.restart_zenebot())
+            restart_message = await self.restart_zenebot()
+            await status_message.edit(content=restart_message)
         except Exception as e:
-            print(f"An error occurred: {e}. But of course it did.")
-            ctx.reply(f"An error occurred: {e}. But of course it did.")
+            error_message = f"An error occurred: {e}. But of course it did."
+            await status_message.edit(content=error_message)
+            print(error_message)
 
 async def setup(bot):
     await bot.add_cog(Util(bot))
