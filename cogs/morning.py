@@ -7,6 +7,7 @@ import discord
 import requests
 from bs4 import BeautifulSoup
 from discord.ext import commands, tasks
+from requests import TooManyRedirects
 
 utc = datetime.timezone.utc
 
@@ -73,13 +74,21 @@ async def send_morning_message(channel):
     random.seed(str(datetime.date.today()))
     embed = discord.Embed(title=f"{random.choice(morning_json['greeting'])} {random.choice(morning_json['address'])}! "
                                 f":sun_with_face: ")
-
-    r = requests.get("https://api.nevnapok.eu/ma")
-    res = r.json()
-    all_names = []
-    for names in res.values():
-        all_names.extend(names)
-    names_string = ", ".join(all_names)
+    try:
+        r = requests.get("https://api.nevnapok.eu/ma", timeout=10)
+        r.raise_for_status()
+        res = r.json()
+        all_names = []
+        for names in res.values():
+            all_names.extend(names)
+        if all_names:
+            names_string = ", ".join(all_names)
+        else:
+            names_string = "Befosott a névnapok api."
+    except TooManyRedirects:
+        names_string = "Sírgödörbe lökték a névnapok apit, ráhányják a földet is"
+    except requests.exceptions.RequestException as e:
+        names_string = f"Befosott, behányt, sírgödörbe lökték a névnapok apit: {e}"
 
     weather = await scrape()
 
