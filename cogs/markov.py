@@ -5,6 +5,7 @@ import textwrap
 from io import BytesIO
 from random import randint
 from PIL import Image, ImageDraw, ImageFont
+from typing import Union
 
 import discord
 import os
@@ -111,7 +112,7 @@ class Markov(commands.Cog):
     @app_commands.choices(command=[app_commands.Choice(name="add", value="add"),
                                    app_commands.Choice(name="list", value="list"),
                                    app_commands.Choice(name="remove", value="remove")])
-    async def exclude_list(self, ctx: commands.Context, command: app_commands.Choice[str],  channel: discord.TextChannel = None):
+    async def exclude_list(self, ctx: commands.Context, command: app_commands.Choice[str],  channel: Union[discord.TextChannel, discord.Thread] = None):
         if command.value == "add":
             if channel is None:
                 await ctx.send("❌ Please specify a channel to add.")
