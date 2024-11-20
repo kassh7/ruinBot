@@ -16,7 +16,7 @@ import markovify
 
 
 def check_and_set_defaults(config):
-    defaults = dict(state_size=1, tries=100, test_output=False, min_words=1)
+    defaults = dict(state_size=1, tries=100, test_output=False, min_words=1, excluded_channels=[])
 
     for key, default_value in defaults.items():
         if key not in config:
@@ -56,6 +56,10 @@ class Markov(commands.Cog):
                 await self.markov(message)
         start_filters = ("$", "r!", "<@1197841378961543198>", "<@1194709611077435466>", "!", ".")
         if message.content.startswith(start_filters):
+            return
+        if '||' in message.content:
+            return
+        if message.channel.id in self.config["excluded_channels"]:
             return
 
         # Regular expression to match URLs
@@ -100,6 +104,49 @@ class Markov(commands.Cog):
                 json.dump(self.config, file)
         else:
             await ctx.send("Invalid config name")
+
+    @commands.hybrid_command(name="exclude_list", with_app_command=True,
+                             description="modifies the exclusion list from markov generation")
+    @app_commands.describe(channel="The text channel to modify",command="Choose an action: add, list, or remove")
+    @app_commands.choices(command=[app_commands.Choice(name="add", value="add"),
+                                   app_commands.Choice(name="list", value="list"),
+                                   app_commands.Choice(name="remove", value="remove")])
+    async def exclude_list(self, ctx: commands.Context, command: app_commands.Choice[str],  channel: discord.TextChannel = None):
+        if command.value == "add":
+            if channel is None:
+                await ctx.send("❌ Please specify a channel to add.")
+                return
+            if channel.id not in self.config["excluded_channels"]:
+                self.config["excluded_channels"].append(channel.id)
+                await ctx.send(f"✅ Channel {channel.mention} added to the exclusion list.")
+                with open("usr/markov_config.json", "w") as file:
+                    json.dump(self.config, file)
+            else:
+                await ctx.send(f"⚠️ Channel {channel.mention} is already in the exclusion list.")
+
+        elif command.value == "remove":
+            if channel is None:
+                await ctx.send("❌ Please specify a channel to remove.")
+                return
+            if channel.id in self.config["excluded_channels"]:
+                self.config["excluded_channels"].remove(channel.id)
+                await ctx.send(f"✅ Channel {channel.mention} removed from the exclusion list.")
+                with open("usr/markov_config.json", "w") as file:
+                    json.dump(self.config, file)
+            else:
+                await ctx.send(f"⚠️ Channel {channel.mention} is not in the exclusion list.")
+
+        elif command.value == "list":
+            if self.config["excluded_channels"]:
+                excluded = [
+                    f"<#{chan_id}>" for chan_id in self.config["excluded_channels"]
+                ]
+                await ctx.send(f"📜 Exclusion list:\n{', '.join(excluded)}")
+            else:
+                await ctx.send("ℹ️ The exclusion list is currently empty.")
+
+        else:
+            await ctx.send("❌ Invalid command!")
 
     @commands.hybrid_command(name="markovpic", with_app_command=True,
                              description="Generates an image with generated text")
@@ -184,7 +231,6 @@ class Markov(commands.Cog):
                 if filename == "urls.txt":
                     continue
                 else:
-                    print(filename)
                     text = text + f.read()
 
         if not self.text_model:
