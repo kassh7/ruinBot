@@ -164,7 +164,7 @@ class Markov(commands.Cog):
                 "password": os.getenv("IMGFLIP_PASS"),
             }
             for x in range(meme['box_count']):
-                sentence = await self.make_sentence(10, True)
+                sentence = await self.make_sentence(10, True, True)
                 post_json.update({"boxes[{}][text]".format(x): sentence if sentence else "MIT MOND?"})
 
             r = requests.post("https://api.imgflip.com/caption_image", data=post_json)
@@ -217,8 +217,8 @@ class Markov(commands.Cog):
             draw = ImageDraw.Draw(template)
             font1 = ImageFont.truetype("res/DejaVuSans.ttf", 45)
             font2 = ImageFont.truetype("res/DejaVuSans.ttf", 30)
-            text1 = await self.make_sentence(10, fix_tags=True)
-            text2 = await self.make_sentence(10, fix_tags=True)
+            text1 = await self.make_sentence(10, fix_tags=True, no_emotes=True)
+            text2 = await self.make_sentence(10, fix_tags=True, no_emotes=True)
             lines1 = textwrap.wrap(text1, width=30)
             lines2 = textwrap.wrap(text2, width=45)
 
@@ -228,10 +228,10 @@ class Markov(commands.Cog):
             # Write text onto the template 466 , 511
             for i in range(len(lines1)):
                 text1_x = 375 - font1.getlength(lines1[i]) // 2
-                draw.multiline_text((text1_x, text1_y+i*35), lines1[i], fill="white", font=font1, align="center")
+                draw.multiline_text((text1_x, text1_y + i * 35), lines1[i], fill="white", font=font1, align="center")
             for i in range(len(lines2)):
                 text2_x = 375 - font2.getlength(lines2[i]) // 2
-                draw.multiline_text((text2_x, text2_y+i*35), lines2[i], fill="white", font=font2, align="center")
+                draw.multiline_text((text2_x, text2_y + i * 35), lines2[i], fill="white", font=font2, align="center")
 
             # Save the final image
             template.save("usr/demotivator.png")
@@ -242,7 +242,7 @@ class Markov(commands.Cog):
             print(f"baj van: {e}")
             await ctx.send(f"baj van: {e}")
 
-    async def make_sentence(self, max_words: int = None, fix_tags: bool = False):
+    async def make_sentence(self, max_words: int = None, fix_tags: bool = False, no_emotes: bool = False):
         text = ""
         for filename in os.listdir("usr/markov/"):
             with open(os.path.join("usr/markov/", filename), 'r', encoding='utf-8') as f:
@@ -267,9 +267,16 @@ class Markov(commands.Cog):
                     username = self.bot.get_user(int(match)).display_name
 
                 sentence = sentence.replace(f'<@{match}>', str(username))
-            return sentence
-        else:
-            return sentence
+        if no_emotes:
+            emote_pattern = r"<:[a-zA-Z0-9_]+:\d+>"
+            while re.search(emote_pattern, sentence):
+                print(f"emote detected {sentence}")
+                # Remove the emote-like substring(s)
+                sentence = self.text_model.make_sentence(tries=self.config["tries"],
+                                                         test_output=self.config["test_output"],
+                                                         min_words=self.config["min_words"], max_words=max_words)
+
+        return sentence
 
 
 async def setup(bot):
