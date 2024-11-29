@@ -180,12 +180,29 @@ class Markov(commands.Cog):
 
     @commands.hybrid_command(name="demotivator", with_app_command=True,
                              description="demotiváló nukáló")
-    async def demotivator(self, ctx, user: discord.Member = None):
+    async def demotivator(self, ctx, user: discord.Member = None, image_url: str = None):
         try:
-            if user is None:
-                user = random.choice(ctx.channel.members)
-            response = requests.get(user.display_avatar.with_format('png').url)
-            image = Image.open(BytesIO(response.content))
+            if image_url:
+                response = requests.get(image_url, stream=True)
+
+                content_type = response.headers.get("Content-Type")
+                if response.status_code == 200 and content_type and content_type.startswith("image/"):
+                    image_data = response.content
+                else:
+                    await ctx.send("A megadott URL nem kép vagy nem érhető el.")
+                    return
+            else:
+                if user is None:
+                    user = random.choice(ctx.channel.members)
+
+                response = requests.get(user.display_avatar.with_format('png').url)
+
+                if response.status_code == 200:
+                    image_data = response.content
+                else:
+                    await ctx.send("Nem sikerült letölteni a felhasználó avatarját.")
+                    return
+            image = Image.open(BytesIO(image_data))
             template = Image.open("res/demotivator_template.png")
             resized_image = image.resize((600, 400))
 
