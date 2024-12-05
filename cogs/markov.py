@@ -1,4 +1,5 @@
 import json
+import math
 import random
 import re
 import textwrap
@@ -237,6 +238,23 @@ class Markov(commands.Cog):
             template.save("usr/demotivator.png")
             file = discord.File("usr/demotivator.png")
             await ctx.send(file=file)
+
+        except Exception as e:
+            print(f"baj van: {e}")
+            await ctx.send(f"baj van: {e}")
+
+    @commands.hybrid_command(name="check_logs", with_app_command=True,
+                             description="megmondja mekkorák a fileok")
+    async def check_file_sizes(self, ctx):
+        try:
+            files = {}
+            for filename in os.listdir("usr/markov/"):
+                files[filename] = os.path.getsize(f"usr/markov/{filename}")
+            field = ""
+            for filename, size in files.items():
+                field += f"{filename} - {math.ceil(size / 1000)} KB\n"
+
+            await ctx.send(field)
 
         except Exception as e:
             print(f"baj van: {e}")
