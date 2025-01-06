@@ -5,6 +5,7 @@ import random
 
 import discord
 import requests
+from requests.exceptions import RequestException
 from bs4 import BeautifulSoup
 from discord.ext import commands, tasks
 from requests import TooManyRedirects
@@ -17,9 +18,14 @@ MORNING = os.getenv("MORNING")
 
 
 async def scrape():
-    url = 'http://www.idokep.hu'  # Replace with your target URL
-    response = requests.get(url)
+    url = 'http://www.idokep.hu'
 
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+    except RequestException as e:
+        print(f"Error fetching data from {url}: {e}")
+        return False
     if response.status_code != 200:
         return False
     else:
@@ -93,18 +99,23 @@ async def send_morning_message(channel):
     weather = await scrape()
 
     embed.add_field(name="Mai névnapok :partying_face:", value=names_string, inline=False)
-    if weather['current_temperature']:
-        embed.add_field(name="Jelenlegi hőmérséklet :thermometer:", value=weather['current_temperature'], inline=True)
-    if weather['current_weather']:
-        embed.add_field(name='Időjárás :partly_sunny: ', value=weather['current_weather'], inline=True)
-    embed.add_field(name=chr(173), value=chr(173))
-    if weather['daily_max_temperature']:
-        embed.add_field(name="Max :thermometer:", value=f"{weather['daily_max_temperature']}˚C", inline=True)
-    if weather['what_to_wear']:
-        embed.add_field(name="Mit vegyél fel? :womans_clothes:", value=weather['what_to_wear'], inline=True)
-    embed.add_field(name=chr(173), value=chr(173))
-    if weather['alert']:
-        embed.add_field(name="Figyelmeztetés :exclamation: ", value=weather['alert'], inline=False)
+    if weather:
+        if weather['current_temperature']:
+            embed.add_field(name="Jelenlegi hőmérséklet :thermometer:", value=weather['current_temperature'], inline=True)
+        if weather['current_weather']:
+            embed.add_field(name='Időjárás :partly_sunny: ', value=weather['current_weather'], inline=True)
+        embed.add_field(name=chr(173), value=chr(173))
+        if weather['daily_max_temperature']:
+            embed.add_field(name="Max :thermometer:", value=f"{weather['daily_max_temperature']}˚C", inline=True)
+        if weather['what_to_wear']:
+            embed.add_field(name="Mit vegyél fel? :womans_clothes:", value=weather['what_to_wear'], inline=True)
+        embed.add_field(name=chr(173), value=chr(173))
+        if weather['alert']:
+            embed.add_field(name="Figyelmeztetés :exclamation: ", value=weather['alert'], inline=False)
+    else:
+        embed.add_field(name="Időkép status", value=random.choice(["Befosott az időkép.",
+                                                                   "Sírgödörbe lökték az időképet, ráhányják a földet is",
+                                                                   "Befosott, behányt, sírgödörbe lökték a névnapok apit"]))
     embed.add_field(name=f"Ma {await generate_day()} van.", value="", inline=False)
     await channel.send(embed=embed)
 
