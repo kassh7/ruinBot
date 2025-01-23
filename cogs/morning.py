@@ -123,17 +123,6 @@ class Morning(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.morning_message_task.start()
-        self.system_channels = []
-        for guild in bot.guilds:
-            # Get the system channel for the guild
-            system_channel = guild.system_channel
-            if system_channel:  # Check if the guild has a system channel
-                try:
-                    self.system_channels.append(system_channel)
-                except discord.Forbidden:
-                    print(f"Bot doesn't have permission to send messages to the system channel of {guild.name}.")
-            else:
-                print(f"No system channel found for {guild.name}.")
 
     def cog_unload(self):
         self.morning_message_task.cancel()
@@ -150,7 +139,18 @@ class Morning(commands.Cog):
 
     @tasks.loop(time=time)
     async def morning_message_task(self):
-        for channel in self.system_channels:
+        system_channels = []
+        for guild in self.bot.guilds:
+            # Get the system channel for the guild
+            system_channel = guild.system_channel
+            if system_channel:  # Check if the guild has a system channel
+                try:
+                    system_channels.append(system_channel)
+                except discord.Forbidden:
+                    print(f"Bot doesn't have permission to send messages to the system channel of {guild.name}.")
+            else:
+                print(f"No system channel found for {guild.name}.")
+        for channel in system_channels:
             try:
                 embed = await make_morning_message()
                 await channel.send(embed=embed)
