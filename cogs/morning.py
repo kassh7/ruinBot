@@ -14,7 +14,6 @@ utc = datetime.timezone.utc
 
 # If no tzinfo is given then UTC is assumed.
 time = datetime.time(hour=6, minute=0, tzinfo=utc)
-MORNING = os.getenv("MORNING")
 
 
 async def scrape():
@@ -75,7 +74,7 @@ async def generate_day():
     return day_name
 
 
-async def send_morning_message(channel):
+async def make_morning_message():
     morning_json = json.load(open('res/morning.json', "r", encoding='utf-8'))
     random.seed(str(datetime.date.today()))
     embed = discord.Embed(title=f"{random.choice(morning_json['greeting'])} {random.choice(morning_json['address'])}! "
@@ -117,13 +116,24 @@ async def send_morning_message(channel):
                                                                    "Sírgödörbe lökték az időképet, ráhányják a földet is",
                                                                    "Befosott, behányt, sírgödörbe lökték a névnapok apit"]))
     embed.add_field(name=f"Ma {await generate_day()} van.", value="", inline=False)
-    await channel.send(embed=embed)
+    return embed
 
 
 class Morning(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.morning_message_task.start()
+        self.system_channels = []
+        for guild in bot.guilds:
+            # Get the system channel for the guild
+            system_channel = guild.system_channel
+            if system_channel:  # Check if the guild has a system channel
+                try:
+                    self.system_channels.append(system_channel)
+                except discord.Forbidden:
+                    print(f"Bot doesn't have permission to send messages to the system channel of {guild.name}.")
+            else:
+                print(f"No system channel found for {guild.name}.")
 
     def cog_unload(self):
         self.morning_message_task.cancel()
@@ -132,19 +142,21 @@ class Morning(commands.Cog):
                              description="jóreggelt pupernyákoló")
     async def morning_message(self, ctx):
         try:
-            await send_morning_message(ctx)
+            embed = await make_morning_message()
+            await ctx.send(embed=embed)
         except Exception as e:
             print(f"baj van: {e}")
             await ctx.send(f"baj van: {e}")
 
     @tasks.loop(time=time)
     async def morning_message_task(self):
-        morning_channel = self.bot.get_channel(int(MORNING))
-        try:
-            await send_morning_message(morning_channel)
-        except Exception as e:
-            print(f"baj van: {e}")
-            await morning_channel.send(f"baj van: {e}")
+        for channel in self.system_channels:
+            try:
+                embed = await make_morning_message()
+                await channel.send(embed=embed)
+            except Exception as e:
+                print(f"baj van: {e}")
+                await channel.send(f"baj van: {e}")
 
 
 async def setup(bot):

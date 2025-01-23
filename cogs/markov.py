@@ -32,8 +32,8 @@ class Markov(commands.Cog):
         self.text_model = None
         self.bot = bot
 
-        if not os.path.exists("usr/markov/"):
-            os.mkdir("usr/markov/")
+        if not os.path.exists(f"usr/markov/"):
+            os.mkdir(f"usr/markov/")
         try:
             with open("usr/markov_config.json", "r", encoding='utf-8') as f:
                 self.config = json.load(f)
@@ -71,22 +71,22 @@ class Markov(commands.Cog):
         if re.search(url_pattern, message.content):
             embeds = [".gif", ".mp4", ".png", ".gif", ".gifv", ".webm", ".jpg", ".jpeg", "tenor.com"]
             if any(ext in message.content for ext in embeds):
-                with open(f"usr/markov/urls.txt", "a", encoding='utf-8') as f:
+                with open(f"usr/markov/{message.guild.id}/urls.txt", "a", encoding='utf-8') as f:
                     f.write(message.content + "\n")
             return
 
-        with open(f"usr/markov/{message.channel}.txt", "a", encoding='utf-8') as f:
+        with open(f"usr/markov/{message.guild.id}/{message.channel}.txt", "a", encoding='utf-8') as f:
             f.write(message.content + "\n")
 
     @commands.command(aliases=['mark'])
     async def markov(self, ctx, seed=None):
         try:
-            with open("usr/markov/urls.txt", 'r', encoding='utf-8') as f:
+            with open(f"usr/markov/{ctx.guild.id}/urls.txt", 'r', encoding='utf-8') as f:
                 urls = f.readlines()
 
             chance = randint(1, 100)
             if chance > 10:
-                sentence = await self.make_sentence()
+                sentence = await self.make_sentence(ctx.guild.id)
             else:
                 sentence = random.choice(urls)
 
@@ -165,7 +165,7 @@ class Markov(commands.Cog):
                 "password": os.getenv("IMGFLIP_PASS"),
             }
             for x in range(meme['box_count']):
-                sentence = await self.make_sentence(10, True, True)
+                sentence = await self.make_sentence(ctx.guild.id, 10, True, True)
                 post_json.update({"boxes[{}][text]".format(x): sentence if sentence else "MIT MOND?"})
 
             r = requests.post("https://api.imgflip.com/caption_image", data=post_json)
@@ -218,8 +218,8 @@ class Markov(commands.Cog):
             draw = ImageDraw.Draw(template)
             font1 = ImageFont.truetype("res/DejaVuSans.ttf", 45)
             font2 = ImageFont.truetype("res/DejaVuSans.ttf", 30)
-            text1 = await self.make_sentence(10, fix_tags=True, no_emotes=True)
-            text2 = await self.make_sentence(10, fix_tags=True, no_emotes=True)
+            text1 = await self.make_sentence(ctx.guild.id, 10, fix_tags=True, no_emotes=True)
+            text2 = await self.make_sentence(ctx.guild.id, 10, fix_tags=True, no_emotes=True)
             lines1 = textwrap.wrap(text1, width=30)
             lines2 = textwrap.wrap(text2, width=45)
 
@@ -248,8 +248,8 @@ class Markov(commands.Cog):
     async def check_file_sizes(self, ctx):
         try:
             files = {}
-            for filename in os.listdir("usr/markov/"):
-                files[filename] = os.path.getsize(f"usr/markov/{filename}")
+            for filename in os.listdir(f"usr/markov/{ctx.guild.id}/"):
+                files[filename] = os.path.getsize(f"usr/markov/{ctx.guild.id}/{filename}")
             field = ""
             for filename, size in files.items():
                 field += f"{filename} - {math.ceil(size / 1000)} KB\n"
@@ -260,10 +260,10 @@ class Markov(commands.Cog):
             print(f"baj van: {e}")
             await ctx.send(f"baj van: {e}")
 
-    async def make_sentence(self, max_words: int = None, fix_tags: bool = False, no_emotes: bool = False):
+    async def make_sentence(self, guild_id: int, max_words: int = None, fix_tags: bool = False, no_emotes: bool = False):
         text = ""
-        for filename in os.listdir("usr/markov/"):
-            with open(os.path.join("usr/markov/", filename), 'r', encoding='utf-8') as f:
+        for filename in os.listdir(f"usr/markov/{guild_id}/"):
+            with open(os.path.join(f"usr/markov/{guild_id}/", filename), 'r', encoding='utf-8') as f:
                 if filename == "urls.txt":
                     continue
                 else:
