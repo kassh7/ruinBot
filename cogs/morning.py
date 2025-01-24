@@ -13,8 +13,7 @@ from requests import TooManyRedirects
 utc = datetime.timezone.utc
 
 # If no tzinfo is given then UTC is assumed.
-time = datetime.time(hour=6, minute=0, tzinfo=utc)
-
+time = datetime.time(hour=int(os.getenv("MORNING_HOUR")), minute=int(os.getenv("MORNING_MINUTE")), tzinfo=utc)
 
 async def scrape():
     url = 'http://www.idokep.hu'
@@ -139,6 +138,7 @@ class Morning(commands.Cog):
 
     @tasks.loop(time=time)
     async def morning_message_task(self):
+        print('Sending morning message')
         system_channels = []
         for guild in self.bot.guilds:
             # Get the system channel for the guild
