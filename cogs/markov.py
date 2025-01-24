@@ -3,6 +3,7 @@ import math
 import random
 import re
 import textwrap
+from datetime import datetime, timedelta
 from io import BytesIO
 from random import randint
 from PIL import Image, ImageDraw, ImageFont
@@ -29,7 +30,7 @@ def check_and_set_defaults(config):
 
 class Markov(commands.Cog):
     def __init__(self, bot):
-        self.text_model = None
+        self.text_model = {}
         self.bot = bot
 
         if not os.path.exists(f"usr/markov/"):
@@ -275,11 +276,17 @@ class Markov(commands.Cog):
                 else:
                     text = text + f.read()
 
-        if not self.text_model:
-            self.text_model = markovify.NewlineText(text, state_size=self.config["state_size"])
-        sentence = self.text_model.make_sentence(tries=self.config["tries"],
-                                                 test_output=self.config["test_output"],
-                                                 min_words=self.config["min_words"], max_words=max_words)
+        if guild_id not in self.text_model or self.text_model[guild_id]['expiry'] < datetime.now().timestamp():
+            print(f"Generating new model for guild {guild_id}...")
+            self.text_model[guild_id] = {
+                "model": markovify.NewlineText(text, state_size=self.config["state_size"]),
+                "expiry": (datetime.now() + timedelta(minutes=5)).timestamp()  # Set expiry to 5 minutes from now
+            }
+
+        sentence = self.text_model[guild_id]["model"].make_sentence(tries=self.config["tries"],
+                                                                    test_output=self.config["test_output"],
+                                                                    min_words=self.config["min_words"],
+                                                                    max_words=max_words)
         if fix_tags:
             # replace tags with names because images
             pattern = r'<@(\d{17,18})>'  # matches discord tags
@@ -296,9 +303,10 @@ class Markov(commands.Cog):
             while re.search(emote_pattern, sentence):
                 print(f"emote detected {sentence}")
                 # Remove the emote-like substring(s)
-                sentence = self.text_model.make_sentence(tries=self.config["tries"],
-                                                         test_output=self.config["test_output"],
-                                                         min_words=self.config["min_words"], max_words=max_words)
+                sentence = self.text_model[guild_id]["model"].make_sentence(tries=self.config["tries"],
+                                                                            test_output=self.config["test_output"],
+                                                                            min_words=self.config["min_words"],
+                                                                            max_words=max_words)
 
         return sentence
 
