@@ -45,6 +45,8 @@ class Markov(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message):
+        if not os.path.exists(f"usr/markov//{message.guild.id}/"):
+            os.mkdir(f"usr/markov//{message.guild.id}/")
         if message.author.bot or not message.content:
             return
         if f"<@{self.bot.user.id}>" in message.content:
@@ -75,7 +77,7 @@ class Markov(commands.Cog):
                     f.write(message.content + "\n")
             return
 
-        with open(f"usr/markov/{message.guild.id}/{message.channel}.txt", "a", encoding='utf-8') as f:
+        with open(f"usr/markov/{message.guild.id}/{message.channel.id}.txt", "a", encoding='utf-8') as f:
             f.write(message.content + "\n")
 
     @commands.command(aliases=['mark'])
