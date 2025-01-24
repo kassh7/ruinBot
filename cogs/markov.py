@@ -154,6 +154,8 @@ class Markov(commands.Cog):
                              description="Generates an image with generated text")
     async def markov_pic(self, ctx):
         try:
+            if ctx.interaction:
+                await ctx.interaction.response.defer()
             boxes = []
             r = requests.get("https://api.imgflip.com/get_memes")
             memes = r.json()
@@ -183,6 +185,8 @@ class Markov(commands.Cog):
                              description="demotiváló nukáló")
     async def demotivator(self, ctx, user: discord.Member = None, image_url: str = None):
         try:
+            if ctx.interaction:
+                await ctx.interaction.response.defer()
             if image_url:
                 response = requests.get(image_url, stream=True)
 
