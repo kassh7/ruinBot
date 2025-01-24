@@ -138,26 +138,34 @@ class Morning(commands.Cog):
 
     @tasks.loop(time=time)
     async def morning_message_task(self):
-        print('Sending morning message')
         try:
             system_channels = []
             for guild in self.bot.guilds:
                 # Get the system channel for the guild
                 system_channel = guild.system_channel
-                if system_channel:  # Check if the guild has a system channel
-                    try:
-                        system_channels.append(system_channel)
-                    except discord.Forbidden:
-                        print(f"Bot doesn't have permission to send messages to the system channel of {guild.name}.")
+                if system_channel:
+                    # Check if the bot has permission to send messages in the system channel
+                    permissions = system_channel.permissions_for(guild.me)
+                    if permissions.send_messages:
+                        try:
+                            system_channels.append(system_channel)
+                        except discord.Forbidden:
+                            print(f"Bot is forbidden from sending messages in {guild.name}'s system channel.")
+                        except discord.HTTPException as e:
+                            print(f"HTTPException occurred in {guild.name}: {e}")
+                    else:
+                        print(f"Bot lacks permissions to send messages in {guild.name}'s system channel.")
                 else:
                     print(f"No system channel found for {guild.name}.")
             for channel in system_channels:
-                embed = await make_morning_message()
-                await channel.send(embed=embed)
+                try:
+                    embed = await make_morning_message()
+                    await channel.send(embed=embed)
+                except Exception as e:
+                    print(f"baj van: {e}")
+                    await channel.send(f"baj van: {e}")
         except Exception as e:
             print(f"baj van: {e}")
-            await channel.send(f"baj van: {e}")
-
 
 async def setup(bot):
     await bot.add_cog(Morning(bot))
