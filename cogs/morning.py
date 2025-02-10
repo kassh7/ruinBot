@@ -157,15 +157,16 @@ class Morning(commands.Cog):
                         print(f"Bot lacks permissions to send messages in {guild.name}'s system channel.")
                 else:
                     print(f"No system channel found for {guild.name}.")
+            embed = await make_morning_message()
             for channel in system_channels:
                 try:
-                    embed = await make_morning_message()
                     await channel.send(embed=embed)
                 except Exception as e:
                     print(f"baj van: {e}")
                     await channel.send(f"baj van: {e}")
         except Exception as e:
             print(f"baj van: {e}")
+
 
 async def setup(bot):
     await bot.add_cog(Morning(bot))
