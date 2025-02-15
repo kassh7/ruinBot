@@ -113,7 +113,7 @@ async def make_morning_message():
     else:
         embed.add_field(name="Időkép status", value=random.choice(["Befosott az időkép.",
                                                                    "Sírgödörbe lökték az időképet, ráhányják a földet is",
-                                                                   "Befosott, behányt, sírgödörbe lökték a névnapok apit"]))
+                                                                   "Befosott, behányt, sírgödörbe lökték az időképet"]))
     embed.add_field(name=f"Ma {await generate_day()} van.", value="", inline=False)
     return embed
 
