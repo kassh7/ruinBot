@@ -7,6 +7,8 @@ import discord
 import requests
 from requests.exceptions import RequestException
 from bs4 import BeautifulSoup
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from discord.ext import commands, tasks
 from requests import TooManyRedirects
 
@@ -15,11 +17,37 @@ utc = datetime.timezone.utc
 # If no tzinfo is given then UTC is assumed.
 time = datetime.time(hour=int(os.getenv("MORNING_HOUR")), minute=int(os.getenv("MORNING_MINUTE")), tzinfo=utc)
 
+
+def get_retry_session(
+        total_retries=5,
+        backoff_factor=2,
+        status_forcelist=(429, 500, 502, 503, 504),
+        allowed_methods=None
+):
+    """
+    Returns a requests.Session() that retries requests on temporary errors.
+    """
+    session = requests.Session()
+    if allowed_methods is None:
+        allowed_methods = ["GET", "POST", "HEAD", "OPTIONS"]
+    retries = Retry(
+        total=total_retries,
+        backoff_factor=backoff_factor,
+        status_forcelist=status_forcelist,
+        allowed_methods=allowed_methods,
+    )
+    adapter = HTTPAdapter(max_retries=retries)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    return session
+
+
 async def scrape():
     url = 'http://www.idokep.hu'
+    session = get_retry_session()
 
     try:
-        response = requests.get(url)
+        response = session.get(url, timeout=10)
         response.raise_for_status()
     except RequestException as e:
         print(f"Error fetching data from {url}: {e}")
@@ -78,8 +106,11 @@ async def make_morning_message():
     random.seed(str(datetime.date.today()))
     embed = discord.Embed(title=f"{random.choice(morning_json['greeting'])} {random.choice(morning_json['address'])}! "
                                 f":sun_with_face: ")
+
+    session = get_retry_session()
+
     try:
-        r = requests.get("https://api.nevnapok.eu/ma", timeout=10)
+        r = session.get("https://api.nevnapok.eu/ma", timeout=10)
         r.raise_for_status()
         res = r.json()
         all_names = []
@@ -92,14 +123,15 @@ async def make_morning_message():
     except TooManyRedirects:
         names_string = "Sírgödörbe lökték a névnapok apit, ráhányják a földet is"
     except requests.exceptions.RequestException as e:
-        names_string = f"Befosott, behányt, sírgödörbe lökték a névnapok apit: {e}"
+        names_string = f"Befosott, behányt, sírgödörbe lökték a névnapok apit"
 
     weather = await scrape()
 
     embed.add_field(name="Mai névnapok :partying_face:", value=names_string, inline=False)
     if weather:
         if weather['current_temperature']:
-            embed.add_field(name="Jelenlegi hőmérséklet :thermometer:", value=weather['current_temperature'], inline=True)
+            embed.add_field(name="Jelenlegi hőmérséklet :thermometer:", value=weather['current_temperature'],
+                            inline=True)
         if weather['current_weather']:
             embed.add_field(name='Időjárás :partly_sunny: ', value=weather['current_weather'], inline=True)
         embed.add_field(name=chr(173), value=chr(173))

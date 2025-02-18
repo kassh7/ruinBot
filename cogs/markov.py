@@ -8,6 +8,8 @@ from io import BytesIO
 from random import randint
 from PIL import Image, ImageDraw, ImageFont
 from typing import Union
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 import discord
 import os
@@ -159,9 +161,24 @@ class Markov(commands.Cog):
         try:
             if ctx.interaction:
                 await ctx.interaction.response.defer()
-            boxes = []
-            r = requests.get("https://api.imgflip.com/get_memes")
+
+            # Create a session with retry behavior
+            session = requests.Session()
+            retries = Retry(
+                total=5,  # total number of retries
+                backoff_factor=2,  # wait 2, 4, 8, ... seconds between retries
+                status_forcelist=[429, 500, 502, 503, 504],
+                allowed_methods=["HEAD", "GET", "OPTIONS", "POST"]
+            )
+            adapter = HTTPAdapter(max_retries=retries)
+            session.mount("https://", adapter)
+            session.mount("http://", adapter)
+
+            # Try to get the memes with a timeout
+            r = session.get("https://api.imgflip.com/get_memes", timeout=10)
+            r.raise_for_status()  # Will raise an HTTPError if the status is not 200
             memes = r.json()
+
             meme_num = randint(0, 99)
             meme = memes["data"]["memes"][meme_num]
             post_json = {
@@ -169,17 +186,31 @@ class Markov(commands.Cog):
                 "username": os.getenv("IMGFLIP_USER"),
                 "password": os.getenv("IMGFLIP_PASS"),
             }
-            for x in range(meme['box_count']):
-                sentence = await self.make_sentence(ctx.guild.id, 10, True, True)
-                post_json.update({"boxes[{}][text]".format(x): sentence if sentence else "MIT MOND?"})
 
-            r = requests.post("https://api.imgflip.com/caption_image", data=post_json)
+            for x in range(meme["box_count"]):
+                sentence = await self.make_sentence(ctx.guild.id, 10, True, True)
+                # Provide a default sentence if none is returned
+                text = sentence if sentence else "MIT MOND?"
+                post_json[f"boxes[{x}][text]"] = text
+
+            # Post to imgflip API to generate the meme image
+            r = session.post("https://api.imgflip.com/caption_image", data=post_json, timeout=10)
+            r.raise_for_status()
             meme_pic = r.json()
+
             if meme_pic["success"]:
                 await ctx.reply(meme_pic["data"]["url"])
             else:
-                await ctx.reply(f"imgflip szar: \n {meme_pic['error_message']}")
+                await ctx.reply(f"Imgflip returned an error:\n{meme_pic.get('error_message', 'Unknown error')}")
 
+        except requests.exceptions.RequestException as req_err:
+            # This block catches network related errors (including retries exhausted)
+            error_message = (
+                "There was a network error contacting the Imgflip API. "
+                "Please try again later."
+            )
+            await ctx.reply(error_message)
+            print(f"Network error: {req_err}")
         except Exception as e:
             print(f"baj van: {e}")
             await ctx.send(f"baj van: {e}")
@@ -288,18 +319,31 @@ class Markov(commands.Cog):
                                                                     min_words=self.config["min_words"],
                                                                     max_words=max_words)
         if fix_tags:
-            # replace tags with names because images
-            pattern = r'<@(\d{17,18})>'  # matches discord tags
-            matches = re.findall(pattern, sentence)
-            for match in matches:
-                if self.bot.get_user(int(match)) is None:
-                    username = "orbán"
-                else:
-                    username = self.bot.get_user(int(match)).display_name
+            # Replace user, channel, and role tags with their names
+            pattern = r'(<@!?\d{17,18}>|<#\d{17,18}>|<@&\d{17,18}>)'
 
-                sentence = sentence.replace(f'<@{match}>', str(username))
+            def replacer(match):
+                mention = match.group(0)
+                if mention.startswith("<@&"):  # Role mention
+                    role_id = int(mention.strip("<@&>"))
+                    for guild in self.bot.guilds:
+                        role = guild.get_role(role_id)
+                        if role is not None:
+                            return role.name
+                    return "fidesz"
+                elif mention.startswith("<#"):  # Channel mention
+                    channel_id = int(mention.strip("<#>"))
+                    channel = self.bot.get_channel(channel_id)
+                    return channel.name if channel is not None else "#karmelita"
+                else:  # User mention
+                    user_id = int(mention.strip("<@!>"))
+                    user = self.bot.get_user(user_id)
+                    return user.display_name if user is not None else "orbán"
+
+            sentence = re.sub(pattern, replacer, sentence)
+
         if no_emotes:
-            emote_pattern = r"<:[a-zA-Z0-9_]+:\d+>"
+            emote_pattern = r"<(?:a:)?[a-zA-Z0-9_]+:\d+>"
             while re.search(emote_pattern, sentence):
                 print(f"emote detected {sentence}")
                 # Remove the emote-like substring(s)
