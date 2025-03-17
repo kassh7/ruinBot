@@ -83,6 +83,42 @@ class Markov(commands.Cog):
         with open(f"usr/markov/{message.guild.id}/{message.channel.id}.txt", "a", encoding='utf-8') as f:
             f.write(message.content + "\n")
 
+    @commands.Cog.listener()
+    async def on_reaction_add(self, reaction, user):
+        """Removes a URL from urls.txt if a user with admin rights reacts with ❌."""
+        if user.bot:
+            return
+
+        # Check if the user has administrator permissions
+        if not user.guild_permissions.administrator:
+            await reaction.message.channel.send(f"❌ {user.mention}, you do not have permission to remove URLs!",
+                                                delete_after=5)
+            return
+
+        if reaction.emoji == "❌":
+            message = reaction.message
+
+            # URL detection regex
+            url_pattern = re.compile(r"https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+")
+            match = re.search(url_pattern, message.content)
+
+            if match:
+                url = match.group()
+                urls_file = f"usr/markov/{message.guild.id}/urls.txt"
+
+                if os.path.exists(urls_file):
+                    with open(urls_file, "r", encoding="utf-8") as f:
+                        urls = f.readlines()
+
+                    # Remove the specific URL
+                    new_urls = [line for line in urls if url not in line]
+
+                    # Save the updated file
+                    with open(urls_file, "w", encoding="utf-8") as f:
+                        f.writelines(new_urls)
+
+                    await message.channel.send(f"✅ URL removed by {user.mention}", delete_after=5)
+
     @commands.command(aliases=['mark'])
     async def markov(self, ctx, seed=None):
         try:
