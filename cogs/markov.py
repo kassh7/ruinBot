@@ -88,13 +88,7 @@ class Markov(commands.Cog):
         """Removes a URL from urls.txt if a user with admin rights reacts with ❌."""
         if user.bot:
             return
-
-        # Check if the user has administrator permissions
-        if not user.guild_permissions.administrator:
-            await reaction.message.channel.send(f"❌ {user.mention}, you do not have permission to remove URLs!",
-                                                delete_after=5)
-            return
-
+            
         if reaction.emoji == "❌":
             message = reaction.message
 
@@ -105,7 +99,13 @@ class Markov(commands.Cog):
             if match:
                 url = match.group()
                 urls_file = f"usr/markov/{message.guild.id}/urls.txt"
-
+                
+                # Check if the user has administrator permissions
+                if not user.guild_permissions.administrator:
+                    await reaction.message.channel.send(f"❌ {user.mention}, you do not have permission to remove URLs!",
+                                                    delete_after=5)
+                    return
+                    
                 if os.path.exists(urls_file):
                     with open(urls_file, "r", encoding="utf-8") as f:
                         urls = f.readlines()
