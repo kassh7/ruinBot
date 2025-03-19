@@ -88,6 +88,12 @@ class Markov(commands.Cog):
         """Removes a URL from urls.txt if a user with admin rights reacts with ❌."""
         if user.bot:
             return
+
+        message = reaction.message
+
+        # Ensure the bot sent the message
+        if message.author != self.bot.user:
+            return  # Exit early if it's not the bot's message
             
         if reaction.emoji == "❌":
             message = reaction.message
@@ -102,16 +108,16 @@ class Markov(commands.Cog):
                 
                 # Check if the user has administrator permissions
                 if not user.guild_permissions.administrator:
-                    await reaction.message.channel.send(f"❌ {user.mention}, you do not have permission to remove URLs!",
-                                                    delete_after=5)
                     return
                     
                 if os.path.exists(urls_file):
                     with open(urls_file, "r", encoding="utf-8") as f:
                         urls = f.readlines()
+                    if not any(message.content in line for line in urls):
+                        return
 
                     # Remove the specific URL
-                    new_urls = [line for line in urls if url not in line]
+                    new_urls = [line for line in urls if message.content not in line]
 
                     # Save the updated file
                     with open(urls_file, "w", encoding="utf-8") as f:
