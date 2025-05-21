@@ -101,8 +101,37 @@ async def generate_day():
     return day_name
 
 
-async def make_morning_message():
+async def generate_month():
+    current_date = datetime.datetime.now()
+    month_eng = current_date.strftime('%B')
+    month_translation = {
+        "January": "Január",
+        "February": "Február",
+        "March": "Március",
+        "April": "Április",
+        "May": "Május",
+        "June": "Június",
+        "July": "Július",
+        "August": "Augusztus",
+        "September": "Szeptember",
+        "October": "Október",
+        "November": "November",
+        "December": "December"
+    }
+    month = month_translation.get(month_eng)
+
+    adjective_json = json.load(open('res/adjective.json', "r", encoding='utf-8'))
+    adjective = random.choice(adjective_json[month[0].lower()])
+    if datetime.datetime.now().date() == datetime.datetime.strptime(os.getenv("SPECIAL_DATE", ""), "%Y-%m-%d").date():
+        adjective = os.getenv("SPECIAL_ADJECTIVE")
+    month_name = f"{adjective.capitalize()} {month}"
+    return month_name
+
+
+async def make_morning_message(command = False):
     morning_json = json.load(open('res/morning.json', "r", encoding='utf-8'))
+    random.seed(str(datetime.date.month))
+    month = await generate_month()
     random.seed(str(datetime.date.today()))
     embed = discord.Embed(title=f"{random.choice(morning_json['greeting'])} {random.choice(morning_json['address'])}! "
                                 f":sun_with_face: ")
@@ -146,6 +175,10 @@ async def make_morning_message():
         embed.add_field(name="Időkép status", value=random.choice(["Befosott az időkép.",
                                                                    "Sírgödörbe lökték az időképet, ráhányják a földet is",
                                                                    "Befosott, behányt, sírgödörbe lökték az időképet"]))
+    if datetime.date.today().day == 1:
+        embed.add_field(name=f"Mától {month}t írunk.", value="", inline=False)
+    elif command:
+        embed.add_field(name=f"A jelenlegi hónap {month}.", value="", inline=False)
     embed.add_field(name=f"Ma {await generate_day()} van.", value="", inline=False)
     return embed
 
@@ -162,7 +195,7 @@ class Morning(commands.Cog):
                              description="jóreggelt pupernyákoló")
     async def morning_message(self, ctx):
         try:
-            embed = await make_morning_message()
+            embed = await make_morning_message(command=True)
             await ctx.send(embed=embed)
         except Exception as e:
             print(f"baj van: {e}")
