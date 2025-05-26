@@ -22,7 +22,7 @@ class Cz(commands.Cog):
             #self.bot.state.add_timeout("cz", expiry_td=datetime.timedelta(minutes=1))
             member = get(ctx.channel.members, id=int(os.getenv("CZ")))
             await member.edit(nick=newnick)
-            await ctx.response.send_message(f"{author} szerint: {member.mention}")
+            await ctx.reply(f"{author} szerint: {member.mention}")
             #else:
             #    await ctx.response.send_message("pill...")
         except Exception as e:
