@@ -25,7 +25,7 @@ class Cz(commands.Cog):
             await ctx.reply(f"{author} szerint: {member.mention}")
 
             # Append the generated nickname to the "nevek.txt" file
-            with open("nevek.txt", "a", encoding="utf-8") as f:
+            with open("usr/nevek.txt", "a", encoding="utf-8") as f:
                 f.write(f"{newnick}\n")
             #else:
             #    await ctx.response.send_message("pill...")
