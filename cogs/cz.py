@@ -23,6 +23,10 @@ class Cz(commands.Cog):
             member = get(ctx.channel.members, id=int(os.getenv("CZ")))
             await member.edit(nick=newnick)
             await ctx.reply(f"{author} szerint: {member.mention}")
+
+            # Append the generated nickname to the "nevek.txt" file
+            with open("usr/nevek.txt", "a", encoding="utf-8") as f:
+                f.write(f"{newnick}\n")
             #else:
             #    await ctx.response.send_message("pill...")
         except Exception as e:
