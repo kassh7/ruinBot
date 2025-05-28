@@ -22,7 +22,8 @@ class Cz(commands.Cog):
             #self.bot.state.add_timeout("cz", expiry_td=datetime.timedelta(minutes=1))
             member = get(ctx.channel.members, id=int(os.getenv("CZ")))
             await member.edit(nick=newnick)
-            await ctx.reply(f"{author} szerint: {member.mention}")
+            await ctx.send(f"{author} szerint: {member.mention}")
+            await ctx.message.delete()
 
             # Append the generated nickname to the "nevek.txt" file
             with open("usr/nevek.txt", "a", encoding="utf-8") as f:
