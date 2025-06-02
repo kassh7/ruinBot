@@ -332,7 +332,11 @@ class Markov(commands.Cog):
                 files[filename] = os.path.getsize(f"usr/markov/{ctx.guild.id}/{filename}")
             field = ""
             for filename, size in files.items():
-                field += f"{filename} - {math.ceil(size / 1000)} KB\n"
+                channel_id = filename.replace(".txt", "")
+                if channel_id.isdigit():
+                    field += f"<#{channel_id}> - {math.ceil(size / 1000)} KB\n"
+                else:
+                    field += f"{filename} - {math.ceil(size / 1000)} KB\n"
 
             await ctx.send(field)
 
