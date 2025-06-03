@@ -366,7 +366,7 @@ class Markov(commands.Cog):
                                                                     max_words=max_words)
         if fix_tags:
             # Replace user, channel, and role tags with their names
-            pattern = r'(<@!?\d{17,18}>|<#\d{17,18}>|<@&\d{17,18}>)'
+            pattern = r'(<@!?\d+>|<#\d+>|<@&\d+>)'
 
             def replacer(match):
                 mention = match.group(0)
