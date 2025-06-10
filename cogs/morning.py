@@ -3,6 +3,7 @@ import json
 import os
 import random
 
+import brotli
 import discord
 import requests
 from requests.exceptions import RequestException
@@ -46,37 +47,51 @@ async def scrape():
     url = 'http://www.idokep.hu'
     session = get_retry_session()
 
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+        'Accept-Encoding': 'br, gzip, deflate',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Connection': 'keep-alive'
+    }
+
     try:
-        response = session.get(url, timeout=10)
+        response = session.get(url, headers=headers, timeout=10)
         response.raise_for_status()
     except RequestException as e:
         print(f"Error fetching data from {url}: {e}")
         return False
-    if response.status_code != 200:
-        return False
-    else:
-        soup = BeautifulSoup(response.content, 'html.parser')
 
-        what_to_wear = [element.get_text(strip=True) for element in soup.select('.what-to-wear')]
-        current_temperature = [element.get_text(strip=True) for element in soup.select('.current-temperature')]
-        current_weather = [element.get_text(strip=True) for element in soup.select('.current-weather')]
-        daily_max_temperature = [element.get_text(strip=True) for element in soup.select('.dailyForecastCol:nth'
-                                                                                         '-child(2) .max a,'
-                                                                                         '.dailyForecastCol:nth'
-                                                                                         '-child(2) .min-max-closer '
-                                                                                         'a:nth-child(1),'
-                                                                                         '.dailyForecastCol:nth'
-                                                                                         '-child(2) .min-max-close '
-                                                                                         'a:nth-child(1)')]
-        alert = [element.get_text(strip=True) for element in soup.select('#topalertbar > a:nth-child(1)')]
+    content_encoding = response.headers.get("Content-Encoding", "").lower()
 
-        return {
-            'what_to_wear': "".join(what_to_wear),
-            'current_temperature': "".join(current_temperature),
-            'current_weather': "".join(current_weather),
-            'daily_max_temperature': "".join(daily_max_temperature),
-            'alert': "; ".join(alert)
-        }
+    try:
+        if "br" in content_encoding:
+            decoded_html = brotli.decompress(response.content).decode("utf-8")
+        elif "gzip" in content_encoding:
+            decoded_html = zlib.decompress(response.content, 16 + zlib.MAX_WBITS).decode("utf-8")
+        elif "deflate" in content_encoding:
+            decoded_html = zlib.decompress(response.content).decode("utf-8")
+        else:
+            decoded_html = response.text
+    except Exception as e:
+        print(f"Decompression failed: {e}")
+        decoded_html = response.text
+
+    soup = BeautifulSoup(decoded_html, "html.parser")
+
+    what_to_wear = soup.select_one('.what-to-wear')
+    current_temperature = soup.select_one('.current-temperature')
+    current_weather = soup.select_one('.current-weather')
+    daily_max = soup.select_one('.dailyForecastCol .max a')
+    alert = soup.select_one('#topalertbar a')
+
+    return {
+        'what_to_wear': what_to_wear.get_text(strip=True) if what_to_wear else '',
+        'current_temperature': current_temperature.get_text(strip=True) if current_temperature else '',
+        'current_weather': current_weather.get_text(strip=True) if current_weather else '',
+        'daily_max_temperature': daily_max.get_text(strip=True) if daily_max else '',
+        'alert': alert.get_text(strip=True) if alert else ''
+    }
 
 
 async def generate_day():
