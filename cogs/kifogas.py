@@ -22,7 +22,7 @@ class Kifogas(commands.Cog):
                              description="kifogás generátor")
     async def kifogas(self, ctx):
         kifogas = await self.generate_kifogas(ctx)
-        await ctx.reply(kifogas)random.choice(["-","+"])+str(random.randrange(1,3))
+        await ctx.reply(kifogas)
 
     async def generate_kifogas(self, ctx):
         kifogas_affix = random.choice(self.kifogas_json['prefixes'])
