@@ -1,8 +1,6 @@
 import json
 import random
 import os
-import discord
-import random
 
 from discord.ext import commands
 

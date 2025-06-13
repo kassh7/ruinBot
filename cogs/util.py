@@ -2,6 +2,7 @@ import os
 from typing import Optional, Literal
 
 import discord
+import random
 import requests
 from discord.ext import commands
 from discord.ext.commands import Context, Greedy
