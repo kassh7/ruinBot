@@ -16,6 +16,11 @@ class Util(commands.Cog):
         self.password = os.getenv("KOZEL_PASS")
         self.token = None
 
+        @bot.tree.context_menu(name="jerma985")
+		async def nyomod(interaction: discord.Interaction, message: discord.Message):
+			await message.reply(random.choice(["-","+"]) + str(random.randrange(1,3)))
+			await interaction.response.send_message(content="hehe", ephemeral=True, delete_after=1)
+
     @commands.command()
     async def ping(self, ctx):
         await ctx.reply(f"Pong {round(self.bot.latency * 1000)}ms")
