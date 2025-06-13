@@ -2,6 +2,7 @@ import os
 from typing import Optional, Literal
 
 import discord
+import random
 import requests
 from discord.ext import commands
 from discord.ext.commands import Context, Greedy
@@ -15,6 +16,11 @@ class Util(commands.Cog):
         self.username = os.getenv("KOZEL_USER")
         self.password = os.getenv("KOZEL_PASS")
         self.token = None
+
+        @bot.tree.context_menu(name="jerma985")
+		async def nyomod(interaction: discord.Interaction, message: discord.Message):
+			await message.reply(random.choice(["-","+"]) + str(random.randrange(1,3)))
+			await interaction.response.send_message(content="hehe", ephemeral=True, delete_after=1)
 
     @commands.command()
     async def ping(self, ctx):
