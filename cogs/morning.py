@@ -145,7 +145,7 @@ async def generate_month():
 
 async def make_morning_message(command = False):
     morning_json = json.load(open('res/morning.json', "r", encoding='utf-8'))
-    random.seed(str(datetime.date.month))
+    random.seed(datetime.date.today().strftime("%Y%m"))
     month = await generate_month()
     random.seed(str(datetime.date.today()))
     embed = discord.Embed(title=f"{random.choice(morning_json['greeting'])} {random.choice(morning_json['address'])}! "
