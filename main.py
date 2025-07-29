@@ -9,18 +9,25 @@ from discord.ext import commands
 from dotenv import load_dotenv
 import logging
 
+# Main logging config
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,  # Set root level to INFO to avoid spam
     filename='ruinbot.log',
     filemode='a',
     format='[%(asctime)s] [%(levelname)s] %(name)s: %(message)s',
 )
 
+# Console output (optional)
 console = logging.StreamHandler()
-console.setLevel(logging.DEBUG)
+console.setLevel(logging.INFO)
 formatter = logging.Formatter('[%(levelname)s] %(message)s')
 console.setFormatter(formatter)
 logging.getLogger().addHandler(console)
+
+# Silence discord.py's debug spam
+logging.getLogger('discord').setLevel(logging.WARNING)
+logging.getLogger('discord.gateway').setLevel(logging.ERROR)
+logging.getLogger('websockets').setLevel(logging.ERROR)
 
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
