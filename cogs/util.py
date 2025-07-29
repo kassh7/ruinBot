@@ -15,6 +15,7 @@ class Util(commands.Cog):
         self.restart_url = os.getenv("KOZEL_RESTART_URL")
         self.username = os.getenv("KOZEL_USER")
         self.password = os.getenv("KOZEL_PASS")
+        self.musicbot_key = os.getenv("MUSICBOT_KEY")
         self.token = None
 
         @bot.tree.context_menu(name="jerma985")
@@ -76,13 +77,16 @@ class Util(commands.Cog):
         logging.info("start_musicbot command triggered.")
         try:
             logging.debug("Running docker compose up...")
-            result = subprocess.run(
-                ["docker", "compose", "up", "-d"],
-                cwd=os.path.expanduser("~/MusicBot"),
-                capture_output=True, text=True, check=True
+            subprocess.run(
+                ["ssh",
+                 "-i", self.musicbot_key,
+                 "-o", "StrictHostKeyChecking=no",
+                 "youruser@localhost",
+                 "/usr/local/bin/musicbot_control.sh", "start"],
+                capture_output=True,
+                text=True,
+                check=True
             )
-            logging.debug(f"stdout: {result.stdout}")
-            logging.debug(f"stderr: {result.stderr}")
             await ctx.send("🎵 RuinBástya container started.")
         except subprocess.CalledProcessError as e:
             logging.error(f"Subprocess error: {e.stderr}")
@@ -97,15 +101,16 @@ class Util(commands.Cog):
         logging.info("stop_musicbot command triggered.")
         try:
             logging.debug("Running docker compose down...")
-            result = subprocess.run(
-                ["docker", "compose", "down"],
-                cwd=os.path.expanduser("~/MusicBot"),
+            subprocess.run(
+                ["ssh",
+                 "-i", self.musicbot_key,
+                 "-o", "StrictHostKeyChecking=no",
+                 "youruser@localhost",
+                 "/usr/local/bin/musicbot_control.sh", "stop"],
                 capture_output=True,
                 text=True,
                 check=True
             )
-            logging.debug(f"stdout: {result.stdout}")
-            logging.debug(f"stderr: {result.stderr}")
             await ctx.send("🛑 RuinBástya container stopped.")
         except subprocess.CalledProcessError as e:
             logging.error(f"Subprocess error: {e.stderr}")
