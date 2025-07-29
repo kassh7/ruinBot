@@ -1,5 +1,5 @@
 import asyncio
-import logging
+
 
 import discord
 import os
@@ -7,12 +7,25 @@ import sqlite3
 
 from discord.ext import commands
 from dotenv import load_dotenv
+import logging
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    filename='ruinbot.log',
+    filemode='a',
+    format='[%(asctime)s] [%(levelname)s] %(name)s: %(message)s',
+)
+
+console = logging.StreamHandler()
+console.setLevel(logging.DEBUG)
+formatter = logging.Formatter('[%(levelname)s] %(message)s')
+console.setFormatter(formatter)
+logging.getLogger().addHandler(console)
 
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 NARE = os.getenv("CHANNEL")
 cogs_dir = "cogs"
-# logging.basicConfig(level=logging.DEBUG)
 
 intents = discord.Intents.all()
 intents.members = True

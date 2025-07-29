@@ -4,6 +4,7 @@ from typing import Optional, Literal
 import discord
 import random
 import subprocess
+import logging
 from discord.ext import commands
 from discord.ext.commands import Context, Greedy
 
@@ -72,28 +73,46 @@ class Util(commands.Cog):
     @commands.command(name="start_musicbot", hidden=True)
     @commands.is_owner()
     async def start_musicbot(self, ctx):
+        logging.info("start_musicbot command triggered.")
         try:
+            logging.debug("Running docker compose up...")
             result = subprocess.run(
                 ["docker", "compose", "up", "-d"],
                 cwd=os.path.expanduser("~/MusicBot"),
                 capture_output=True, text=True, check=True
             )
+            logging.debug(f"stdout: {result.stdout}")
+            logging.debug(f"stderr: {result.stderr}")
             await ctx.send("🎵 RuinBástya container started.")
         except subprocess.CalledProcessError as e:
+            logging.error(f"Subprocess error: {e.stderr}")
             await ctx.send(f"❌ Failed to start container:\n```{e.stderr}```")
+        except Exception as ex:
+            logging.exception("Unexpected error in start_musicbot")
+            await ctx.send("❌ An unexpected error occurred.")
 
     @commands.command(name="stop_musicbot", hidden=True)
     @commands.is_owner()
     async def stop_musicbot(self, ctx):
+        logging.info("stop_musicbot command triggered.")
         try:
+            logging.debug("Running docker compose down...")
             result = subprocess.run(
                 ["docker", "compose", "down"],
                 cwd=os.path.expanduser("~/MusicBot"),
-                capture_output=True, text=True, check=True
+                capture_output=True,
+                text=True,
+                check=True
             )
+            logging.debug(f"stdout: {result.stdout}")
+            logging.debug(f"stderr: {result.stderr}")
             await ctx.send("🛑 RuinBástya container stopped.")
         except subprocess.CalledProcessError as e:
+            logging.error(f"Subprocess error: {e.stderr}")
             await ctx.send(f"❌ Failed to stop container:\n```{e.stderr}```")
+        except Exception as ex:
+            logging.exception("Unexpected error in stop_musicbot")
+            await ctx.send("❌ An unexpected error occurred.")
 
 
 async def setup(bot):
