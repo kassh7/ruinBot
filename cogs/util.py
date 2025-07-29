@@ -3,10 +3,9 @@ from typing import Optional, Literal
 
 import discord
 import random
-import requests
+import subprocess
 from discord.ext import commands
 from discord.ext.commands import Context, Greedy
-
 
 class Util(commands.Cog):
     def __init__(self, bot):
@@ -70,51 +69,32 @@ class Util(commands.Cog):
             print(f"baj van: {e}")
             await ctx.send(f"baj van: {e}")
 
-    async def get_token(self):
-        headers = {
-            'accept': 'application/json, text/plain, */*',
-            'content-type': 'application/json'
-        }
-        data = {
-            'username': self.username,
-            'password': self.password
-        }
-        response = requests.post(self.auth_url, headers=headers, json=data)
-        if response.status_code == 200:
-            self.token = response.json().get('jwt')
-            if not self.token:
-                raise ValueError("Token not found in the response. How typical...")
-        else:
-            raise Exception("Failed to get token. Because why would anything work?")
-
-    async def restart_zenebot(self):
-        if self.token is None:
-            raise Exception("No token found. Get the token first, genius.")
-
-        headers = {
-            'accept': 'application/json, text/plain, */*',
-            'content-type': 'application/json',
-            'authorization': f'Bearer {self.token}'
-        }
-        response = requests.post(self.restart_url, headers=headers, json={})
-        if response.status_code == 204:
-            return "Kozelbot successfully restarted. Miracles do happen."
-        else:
-            raise Exception(
-                f"Failed to restart Kozelbot. Response: {response.status_code}, {response.text}. What a shocker.")
-
-    @commands.hybrid_command(name="kozel", with_app_command=True,
-                             description="kozelbot újraindítós")
-    async def restart_kozel(self,ctx):
+    @commands.command(name="start_musicbot", hidden=True)
+    @commands.is_owner()
+    async def start_musicbot(self, ctx):
         try:
-            status_message = await ctx.reply("Restarting Kozelbot... This might take a while.")
-            await self.get_token()
-            restart_message = await self.restart_zenebot()
-            await status_message.edit(content=restart_message)
-        except Exception as e:
-            error_message = f"An error occurred: {e}. But of course it did."
-            await status_message.edit(content=error_message)
-            print(error_message)
+            result = subprocess.run(
+                ["docker compose", "up", "-d"],
+                cwd=os.path.expanduser("~/MusicBot"),
+                capture_output=True, text=True, check=True
+            )
+            await ctx.send("🎵 RuinBástya container started.")
+        except subprocess.CalledProcessError as e:
+            await ctx.send(f"❌ Failed to start container:\n```{e.stderr}```")
+
+    @commands.command(name="stop_musicbot", hidden=True)
+    @commands.is_owner()
+    async def stop_musicbot(self, ctx):
+        try:
+            result = subprocess.run(
+                ["docker compose", "down"],
+                cwd=os.path.expanduser("~/MusicBot"),
+                capture_output=True, text=True, check=True
+            )
+            await ctx.send("🛑 RuinBástya container stopped.")
+        except subprocess.CalledProcessError as e:
+            await ctx.send(f"❌ Failed to stop container:\n```{e.stderr}```")
+
 
 async def setup(bot):
     await bot.add_cog(Util(bot))
