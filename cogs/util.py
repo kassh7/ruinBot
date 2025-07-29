@@ -74,7 +74,7 @@ class Util(commands.Cog):
     async def start_musicbot(self, ctx):
         try:
             result = subprocess.run(
-                ["docker compose", "up", "-d"],
+                ["docker", "compose", "up", "-d"],
                 cwd=os.path.expanduser("~/MusicBot"),
                 capture_output=True, text=True, check=True
             )
@@ -87,7 +87,7 @@ class Util(commands.Cog):
     async def stop_musicbot(self, ctx):
         try:
             result = subprocess.run(
-                ["docker compose", "down"],
+                ["docker", "compose", "down"],
                 cwd=os.path.expanduser("~/MusicBot"),
                 capture_output=True, text=True, check=True
             )
