@@ -16,6 +16,7 @@ class Util(commands.Cog):
         self.username = os.getenv("KOZEL_USER")
         self.password = os.getenv("KOZEL_PASS")
         self.musicbot_key = os.getenv("MUSICBOT_KEY")
+        self.musicbot_host = os.getenv("MUSICBOT_HOST")
         self.token = None
 
         @bot.tree.context_menu(name="jerma985")
@@ -81,7 +82,7 @@ class Util(commands.Cog):
                 ["ssh",
                  "-i", self.musicbot_key,
                  "-o", "StrictHostKeyChecking=no",
-                 "youruser@localhost",
+                 self.musicbot_host,
                  "/usr/local/bin/musicbot_control.sh", "start"],
                 capture_output=True,
                 text=True,
@@ -105,7 +106,7 @@ class Util(commands.Cog):
                 ["ssh",
                  "-i", self.musicbot_key,
                  "-o", "StrictHostKeyChecking=no",
-                 "youruser@localhost",
+                 self.musicbot_host,
                  "/usr/local/bin/musicbot_control.sh", "stop"],
                 capture_output=True,
                 text=True,
