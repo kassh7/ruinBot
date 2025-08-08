@@ -40,11 +40,11 @@ class Cz(commands.Cog):
         consonants = [char for char in "bcdfghjklmnpqrstvwxz"] + ["gy", "cz", "dzs", "ty", "br", "cs"]
         prebuilts = [
             "hét", "gét", "rét", "új", "már", "gép", "tér", "vér", "zágráb", "zárt", "kétabony", "hosszú", "bánat",
-            "dér"
+            "dér", "szar", "egy", "két", "cék", "nagy"
         ]
         enders = [
             "végi", "helyi", "ési", "réti", "gényi", "esi", "melletti", "közi", "kerti", "faszú", "téri", "falvi",
-            "fejű"
+            "fejű", "házi", "lányi", "orrú"
         ]
 
         out = ""
