@@ -53,7 +53,7 @@ class Markov(commands.Cog):
         if message.author.bot or not message.content:
             return
         if f"<@{self.bot.user.id}>" in message.content:
-            await self.markov(message, seed=message.content)
+            await self.markov(message)
 
         if message.type == discord.MessageType.reply:
             reference = await message.channel.fetch_message(
@@ -94,7 +94,7 @@ class Markov(commands.Cog):
         # Ensure the bot sent the message
         if message.author != self.bot.user:
             return  # Exit early if it's not the bot's message
-            
+
         if reaction.emoji == "❌":
             message = reaction.message
 
@@ -105,11 +105,11 @@ class Markov(commands.Cog):
             if match:
                 url = match.group()
                 urls_file = f"usr/markov/{message.guild.id}/urls.txt"
-                
+
                 # Check if the user has administrator permissions
                 if not user.guild_permissions.administrator:
                     return
-                    
+
                 if os.path.exists(urls_file):
                     with open(urls_file, "r", encoding="utf-8") as f:
                         urls = f.readlines()
@@ -132,10 +132,22 @@ class Markov(commands.Cog):
                 urls = f.readlines()
 
             chance = randint(1, 100)
-            if chance > 10:
-                sentence = await self.make_sentence(ctx.guild.id)
+            sentence = None
+
+            # If a seed is provided, use it to steer generation.
+            # Convention:
+            #   - seed starts with '^'  -> force sentence to start with the remainder
+            #   - otherwise             -> sentence must include the seed somewhere
+            if seed:
+                print(f"seed gen")
+                seed = seed.strip()
+                sentence = await self.make_sentence(ctx.guild.id, start_with=seed)
             else:
-                sentence = random.choice(urls)
+                print(f"no seed gen")
+                if chance > 10 or not urls:
+                    sentence = await self.make_sentence(ctx.guild.id)
+                else:
+                    sentence = random.choice(urls).strip()
 
             await ctx.reply(sentence if sentence else "MIT MOND?")
         except Exception as e:
@@ -156,11 +168,12 @@ class Markov(commands.Cog):
 
     @commands.hybrid_command(name="exclude_list", with_app_command=True,
                              description="modifies the exclusion list from markov generation")
-    @app_commands.describe(channel="The text channel to modify",command="Choose an action: add, list, or remove")
+    @app_commands.describe(channel="The text channel to modify", command="Choose an action: add, list, or remove")
     @app_commands.choices(command=[app_commands.Choice(name="add", value="add"),
                                    app_commands.Choice(name="list", value="list"),
                                    app_commands.Choice(name="remove", value="remove")])
-    async def exclude_list(self, ctx: commands.Context, command: app_commands.Choice[str],  channel: Union[discord.TextChannel, discord.Thread] = None):
+    async def exclude_list(self, ctx: commands.Context, command: app_commands.Choice[str],
+                           channel: Union[discord.TextChannel, discord.Thread] = None):
         if command.value == "add":
             if channel is None:
                 await ctx.send("❌ Please specify a channel to add.")
@@ -197,9 +210,10 @@ class Markov(commands.Cog):
         else:
             await ctx.send("❌ Invalid command!")
 
-    @commands.hybrid_command(name="markovpic", with_app_command=True,
-                             description="Generates an image with generated text")
-    async def markov_pic(self, ctx):
+    @commands.hybrid_command(with_app_command=True,
+                             description="Generates an image with generated text",
+                             aliases=["randommeme", "markovpic"])
+    async def markov_pic(self, ctx, seed: str = None):
         try:
             if ctx.interaction:
                 await ctx.interaction.response.defer()
@@ -228,9 +242,15 @@ class Markov(commands.Cog):
                 "username": os.getenv("IMGFLIP_USER"),
                 "password": os.getenv("IMGFLIP_PASS"),
             }
-
+            seed_box = randint(0, meme["box_count"] - 1)
             for x in range(meme["box_count"]):
-                sentence = await self.make_sentence(ctx.guild.id, 10, True, True)
+                if seed and x == seed_box:
+                    print(f"seed gen")
+                    seed = seed.strip()
+                    sentence = await self.make_sentence(ctx.guild.id, start_with=seed, max_words=10, fix_tags=True,
+                                                        no_emotes=True)
+                else:
+                    sentence = await self.make_sentence(ctx.guild.id, 10, True, True)
                 # Provide a default sentence if none is returned
                 text = sentence if sentence else "MIT MOND?"
                 post_json[f"boxes[{x}][text]"] = text
@@ -344,8 +364,10 @@ class Markov(commands.Cog):
             print(f"baj van: {e}")
             await ctx.send(f"baj van: {e}")
 
-    async def make_sentence(self, guild_id: int, max_words: int = None, fix_tags: bool = False, no_emotes: bool = False):
+    async def make_sentence(self, guild_id: int, max_words: int = None, fix_tags: bool = False, no_emotes: bool = False,
+                            start_with: str = None):
         text = ""
+        sentence = None
         for filename in os.listdir(f"usr/markov/{guild_id}/"):
             with open(os.path.join(f"usr/markov/{guild_id}/", filename), 'r', encoding='utf-8') as f:
                 if filename == "urls.txt":
@@ -359,11 +381,26 @@ class Markov(commands.Cog):
                 "model": markovify.NewlineText(text, state_size=self.config["state_size"]),
                 "expiry": (datetime.now() + timedelta(minutes=5)).timestamp()  # Set expiry to 5 minutes from now
             }
+        model = self.text_model[guild_id]["model"]
+        if start_with:
+            # markovify requires the start length to match state_size if strict=True.
+            # If your state_size > 1, users can pass multiple words like "hello there".
+            try:
+                sentence = model.make_sentence_with_start(
+                    start_with,
+                    strict=True,
+                    max_words=max_words,
+                    tries=self.config["tries"]
+                )
+            except Exception:
+                sentence = None  # fall through to regular attempts if it fails
 
-        sentence = self.text_model[guild_id]["model"].make_sentence(tries=self.config["tries"],
-                                                                    test_output=self.config["test_output"],
-                                                                    min_words=self.config["min_words"],
-                                                                    max_words=max_words)
+            # 3) If no start_with or it failed, do normal / must-include generation
+        if sentence is None:
+            sentence = self.text_model[guild_id]["model"].make_sentence(tries=self.config["tries"],
+                                                                        test_output=self.config["test_output"],
+                                                                        min_words=self.config["min_words"],
+                                                                        max_words=max_words)
         if fix_tags:
             # Replace user, channel, and role tags with their names
             pattern = r'(<@!?\d+>|<#\d+>|<@&\d+>)'
