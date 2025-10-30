@@ -53,7 +53,11 @@ class Markov(commands.Cog):
         if message.author.bot or not message.content:
             return
         if f"<@{self.bot.user.id}>" in message.content:
-            await self.markov(message)
+            if f"<@{self.bot.user.id}> ^" in message.content:
+                seed = message.content.replace(f"<@{self.bot.user.id}> ^", "")
+                await self.markov(message, seed=seed)
+            else:
+                await self.markov(message)
 
         if message.type == discord.MessageType.reply:
             reference = await message.channel.fetch_message(
@@ -125,7 +129,7 @@ class Markov(commands.Cog):
 
                     await message.channel.send(f"✅ URL removed by {user.mention}", delete_after=5)
 
-    @commands.command(aliases=['mark'])
+    @commands.hybrid_command(aliases=['mark'])
     async def markov(self, ctx, seed=None):
         try:
             with open(f"usr/markov/{ctx.guild.id}/urls.txt", 'r', encoding='utf-8') as f:
@@ -210,9 +214,8 @@ class Markov(commands.Cog):
         else:
             await ctx.send("❌ Invalid command!")
 
-    @commands.hybrid_command(with_app_command=True,
-                             description="Generates an image with generated text",
-                             aliases=["randommeme", "markovpic"])
+    @commands.hybrid_command(name="markovpic", with_app_command=True,
+                             description="Generates an image with generated text")
     async def markov_pic(self, ctx, seed: str = None):
         try:
             if ctx.interaction:
