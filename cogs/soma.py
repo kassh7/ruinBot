@@ -25,7 +25,7 @@ class Soma(commands.Cog):
         else:
             print(f"File '{self.cd_path}' already exists.")
 
-    @commands.hybrid_command(name="ruin", with_app_command=True,
+    @app_commands.command(name="ruin", with_app_command=True,
                              description="Nemes bátorsággal és hevességgel pörgesd a szerencse kerekét.")
     async def soma_color(self, ctx):
         try:
