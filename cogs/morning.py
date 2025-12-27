@@ -2,21 +2,29 @@ import datetime
 import json
 import os
 import random
+import zlib
 
 import brotli
 import discord
 import requests
+import locale
 from requests.exceptions import RequestException
 from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from discord.ext import commands, tasks
-from requests import TooManyRedirects
+from pathlib import Path
+from datetime import date
 
 utc = datetime.timezone.utc
+try:
+    locale.setlocale(locale.LC_COLLATE, "hu_HU.UTF-8")
+except locale.Error:
+    pass
 
 # If no tzinfo is given then UTC is assumed.
 time = datetime.time(hour=int(os.getenv("MORNING_HOUR")), minute=int(os.getenv("MORNING_MINUTE")), tzinfo=utc)
+NAMEDAYS = json.loads(Path("res/namedays_hu_mmdd.json").read_text(encoding="utf-8"))
 
 
 def get_retry_session(
@@ -143,7 +151,7 @@ async def generate_month():
     return month_name
 
 
-async def make_morning_message(command = False):
+async def make_morning_message(command=False):
     morning_json = json.load(open('res/morning.json', "r", encoding='utf-8'))
     random.seed(datetime.date.today().strftime("%Y%m"))
     month = await generate_month()
@@ -154,20 +162,16 @@ async def make_morning_message(command = False):
     session = get_retry_session()
 
     try:
-        r = session.get("https://api.nevnapok.eu/ma", timeout=10)
-        r.raise_for_status()
-        res = r.json()
-        all_names = []
-        for names in res.values():
-            all_names.extend(names)
+        all_names = today_namedays()
+
         if all_names:
+            all_names = sort_hungarian(all_names)
             names_string = ", ".join(all_names)
         else:
-            names_string = "Befosott a névnapok api."
-    except TooManyRedirects:
-        names_string = "Sírgödörbe lökték a névnapok apit, ráhányják a földet is"
-    except requests.exceptions.RequestException as e:
-        names_string = f"Befosott, behányt, sírgödörbe lökték a névnapok apit"
+            names_string = "Befosott a névnapok adatbázis."
+
+    except Exception:
+        names_string = "Befosott, behányt, sírgödörbe lökték a névnapok adatbázist"
 
     weather = await scrape()
 
@@ -196,6 +200,16 @@ async def make_morning_message(command = False):
         embed.add_field(name=f"A jelenlegi hónap {month}.", value="", inline=False)
     embed.add_field(name=f"Ma {await generate_day()} van.", value="", inline=False)
     return embed
+
+
+def today_namedays(d: date | None = None) -> list[str]:
+    d = d or date.today()
+    key = f"{d.month:02d}{d.day:02d}"
+    return NAMEDAYS.get(key, [])
+
+
+def sort_hungarian(names: list[str]) -> list[str]:
+    return sorted(names, key=locale.strxfrm)
 
 
 class Morning(commands.Cog):
