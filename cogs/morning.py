@@ -165,7 +165,6 @@ async def make_morning_message(command=False):
         all_names = today_namedays()
 
         if all_names:
-            all_names = sort_hungarian(all_names)
             names_string = ", ".join(all_names)
         else:
             names_string = "Befosott a névnapok adatbázis."
