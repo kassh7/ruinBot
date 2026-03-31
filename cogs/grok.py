@@ -22,7 +22,7 @@ class Grok(commands.Cog):
     async def on_message(self, message):
         if message.author.bot:
             return
-        if "Gork ez igaz" in message.content.lower():
+        if "gork ez igaz" in message.content.lower():
             await self.send_grok(message)
 
 
