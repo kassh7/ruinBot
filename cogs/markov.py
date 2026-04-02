@@ -41,7 +41,7 @@ class Markov(commands.Cog):
             with open("usr/markov_config.json", "r", encoding='utf-8') as f:
                 self.config = json.load(f)
         except FileNotFoundError:
-            self.config = check_and_set_defaults([])
+            self.config = check_and_set_defaults({})
             with open("usr/markov_config.json", "w") as file:
                 json.dump(self.config, file)
         self.config = check_and_set_defaults(self.config)
