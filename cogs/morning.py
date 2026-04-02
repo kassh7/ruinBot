@@ -204,7 +204,7 @@ async def make_morning_message(command=False):
         embed.add_field(name="Időkép status", value=random.choice(["Befosott az időkép.",
                                                                    "Sírgödörbe lökték az időképet, ráhányják a földet is",
                                                                    "Befosott, behányt, sírgödörbe lökték az időképet"]))
-            # --- 🇭🇺 ÜNNEPNAPOK ---
+    # --- 🇭🇺 ÜNNEPNAPOK ---
     try:
         week_holidays = await get_week_holidays()
         next_holiday = await get_next_holiday()
