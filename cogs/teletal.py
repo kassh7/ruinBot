@@ -6,7 +6,7 @@ import os
 from datetime import datetime, timedelta
 from cogs.holiday_cache import get_last_workday
 
-CONFIG_FILE = "teletal_config.json"
+CONFIG_FILE = "usr/teletal_config.json"
 
 class teletalReminder(commands.Cog):
     def __init__(self, bot):
