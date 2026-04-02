@@ -15,6 +15,7 @@ from urllib3.util.retry import Retry
 from discord.ext import commands, tasks
 from pathlib import Path
 from datetime import date
+from cogs.holiday_cache import get_next_holiday, get_week_holidays
 
 utc = datetime.timezone.utc
 try:
@@ -118,8 +119,13 @@ async def generate_day():
 
     adjective_json = json.load(open('res/adjective.json', "r", encoding='utf-8'))
     adjective = random.choice(adjective_json[day[0].lower()])
-    if datetime.datetime.now().date() == datetime.datetime.strptime(os.getenv("SPECIAL_DATE", ""), "%Y-%m-%d").date():
-        adjective = os.getenv("SPECIAL_ADJECTIVE")
+    special_date = os.getenv("SPECIAL_DATE", "")
+    if special_date:
+        try:
+            if datetime.datetime.now().date() == datetime.datetime.strptime(special_date, "%Y-%m-%d").date():
+                adjective = os.getenv("SPECIAL_ADJECTIVE", adjective)
+        except ValueError:
+            pass
     day_name = f"{adjective.capitalize()} {day}"
     return day_name
 
@@ -145,8 +151,13 @@ async def generate_month():
 
     adjective_json = json.load(open('res/adjective.json', "r", encoding='utf-8'))
     adjective = random.choice(adjective_json[month[0].lower()])
-    if datetime.datetime.now().date() == datetime.datetime.strptime(os.getenv("SPECIAL_DATE", ""), "%Y-%m-%d").date():
-        adjective = os.getenv("SPECIAL_ADJECTIVE")
+    special_date = os.getenv("SPECIAL_DATE", "")
+    if special_date:
+        try:
+            if datetime.datetime.now().date() == datetime.datetime.strptime(special_date, "%Y-%m-%d").date():
+                adjective = os.getenv("SPECIAL_ADJECTIVE", adjective)
+        except ValueError:
+            pass
     month_name = f"{adjective.capitalize()} {month}"
     return month_name
 
@@ -193,6 +204,32 @@ async def make_morning_message(command=False):
         embed.add_field(name="Időkép status", value=random.choice(["Befosott az időkép.",
                                                                    "Sírgödörbe lökték az időképet, ráhányják a földet is",
                                                                    "Befosott, behányt, sírgödörbe lökték az időképet"]))
+            # --- 🇭🇺 ÜNNEPNAPOK ---
+    try:
+        week_holidays = await get_week_holidays()
+        next_holiday = await get_next_holiday()
+
+        if week_holidays:
+            day_names = ["Hétfő", "Kedd", "Szerda", "Csütörtök", "Péntek", "Szombat", "Vasárnap"]
+            holiday_lines = []
+            for h in week_holidays:
+                day_name = day_names[h['date'].weekday()]
+                if h['days_until'] == 0:
+                    holiday_lines.append(f"🎉 **MA: {h['localName']}!**")
+                elif h['days_until'] == 1:
+                    holiday_lines.append(f"🎊 Holnap: **{h['localName']}** ({day_name})")
+                else:
+                    holiday_lines.append(f"📅 {h['localName']} - {h['date'].strftime('%m.%d')} ({day_name})")
+            embed.add_field(name="Munkaszüneti nap ezen a héten! 🇭🇺", value="\n".join(holiday_lines), inline=False)
+        elif next_holiday:
+            embed.add_field(
+                name="Következő munkaszüneti nap 🇭🇺",
+                value=f"**{next_holiday['localName']}** - {next_holiday['date'].strftime('%Y.%m.%d')} ({next_holiday['days_until']} nap múlva)",
+                inline=False
+            )
+    except Exception as e:
+        print(f"baj van: {e}")
+        
     if datetime.date.today().day == 1:
         embed.add_field(name=f"Mától {month}t írunk.", value="", inline=False)
     elif command:
