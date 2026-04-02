@@ -1,3 +1,17 @@
-/.env
-/.venv/
-/usr/
+# python bytecode garbage
+__pycache__/
+*.py[cod]
+*$py.class
+
+# virtual environments (DO NOT UPLOAD THESE!)
+.venv/
+venv/
+env/
+
+# secret stuff (IF YOU UPLOAD THIS I WILL BITE YOU)
+.env
+
+# local bot data (so you don't overwrite the server's data!)
+usr/
+food_config.json
+holidays.json
