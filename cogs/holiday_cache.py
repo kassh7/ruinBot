@@ -3,7 +3,7 @@ import json
 import os
 from datetime import datetime, timedelta
 
-HOLIDAY_CACHE_FILE = "holidays.json"
+HOLIDAY_CACHE_FILE = "usr/holidays.json"
 
 async def get_holidays(year=None):
     """
