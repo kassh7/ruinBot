@@ -40,9 +40,6 @@ class Grok(commands.Cog):
         if (has_name or is_mentioned) and has_truth:
             await self.send_grok(message)
 
-        # keep commands working
-        await self.bot.process_commands(message)
-
 
 async def setup(bot):
     await bot.add_cog(Grok(bot))
