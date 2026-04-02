@@ -52,12 +52,13 @@ async def get_holiday_dates(year=None):
 
 async def get_last_workday():
     """Kiszámolja a hét utolsó munkanapját."""
-    today = datetime.now()
+    today = datetime.now().date()
     holiday_dates = await get_holiday_dates(today.year)
 
-    days_to_friday = 4 - today.weekday()
-    last_workday = today.date() + timedelta(days=days_to_friday)
+    monday = today - timedelta(days=today.weekday())
+    friday = monday + timedelta(days=4)
 
+    last_workday = friday
     while last_workday in holiday_dates or last_workday.weekday() > 4:
         last_workday -= timedelta(days=1)
 
