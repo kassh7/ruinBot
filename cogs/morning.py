@@ -15,7 +15,7 @@ from urllib3.util.retry import Retry
 from discord.ext import commands, tasks
 from pathlib import Path
 from datetime import date
-from cogs.holiday_cache import get_next_holiday, get_week_holidays
+from utils.holiday_cache import get_next_holiday, get_week_holidays
 
 utc = datetime.timezone.utc
 try:

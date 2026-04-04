@@ -1,10 +1,10 @@
 import discord
-from discord.ext import commands, tasks
+from discord.ext import commands
 import asyncio
 import json
 import os
 from datetime import datetime, timedelta, time
-from cogs.holiday_cache import get_last_workday
+from utils.holiday_cache import get_last_workday
 
 CONFIG_FILE = "usr/teletal_config.json"
 

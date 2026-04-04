@@ -1,11 +1,12 @@
 import discord
 from discord.ext import commands
 from datetime import datetime
-from cogs.holiday_cache import get_holidays
+from utils.holiday_cache import get_holidays
 
 DAY_NAMES = ["Hétfő", "Kedd", "Szerda", "Csütörtök", "Péntek", "Szombat", "Vasárnap"]
 
-class Unnepnapok(commands.Cog):
+
+class Holidays(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
@@ -66,5 +67,6 @@ class Unnepnapok(commands.Cog):
         embed.set_footer(text=f"Összesen {len(free_days)} szabad nap van hátra idén 🎉")
         await ctx.send(embed=embed)
 
+
 async def setup(bot):
-    await bot.add_cog(Unnepnapok(bot))
+    await bot.add_cog(Holidays(bot))
