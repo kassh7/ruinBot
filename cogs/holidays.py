@@ -46,7 +46,7 @@ class Holidays(commands.Cog):
 
         embed = discord.Embed(
             title=f"🇭🇺 Munkaszüneti napok {today.year}",
-            description="Hátralévő hétköznapra eső ünnepek\n(mert a hétvégire eső ügyis lófasz 😤)",
+            description="Hátralévő hétköznapra eső ünnepek\n(mert a hétvégire eső úgyis lófasz 😤)",
             color=0xC8102E
         )
 

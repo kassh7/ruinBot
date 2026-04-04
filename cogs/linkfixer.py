@@ -18,46 +18,34 @@ class LinkFixer(commands.Cog):
         if message.author.bot:
             return
 
-        original_content = message.content
-        new_content = original_content
-        changed = False
+        fixed_links = []
 
         # --- TWITTER / X FIX ---
-        if self.x_pattern.search(new_content):
-            x_domains = ["fxtwitter.com", "vxtwitter.com", "fixupx.com", "girlcockx.com", "hitlerx.com", "cunnyx.com"]
-
-            def replace_x(match):
-                domain = random.choice(x_domains)
-                return f"https://{domain}/{match.group(1)}"
-
-            new_content = self.x_pattern.sub(replace_x, new_content)
-            changed = True
+        x_domains = ["fxtwitter.com", "vxtwitter.com", "fixupx.com", "girlcockx.com", "hitlerx.com", "cunnyx.com", "stupidpenisx.com"]
+        for match in self.x_pattern.finditer(message.content):
+            domain = random.choice(x_domains)
+            fixed_links.append(f"https://{domain}/{match.group(1)}")
 
         # --- INSTAGRAM FIX ---
-        if self.ig_pattern.search(new_content):
-            new_content = self.ig_pattern.sub(r'https://kkinstagram.com/\1', new_content)
-            changed = True
+        for match in self.ig_pattern.finditer(message.content):
+            fixed_links.append(f"https://kkinstagram.com/{match.group(1)}")
 
         # --- REDDIT FIX ---
-        if self.reddit_pattern.search(new_content):
-            new_content = self.reddit_pattern.sub(r'https://rxddit.com/\1', new_content)
-            changed = True
+        for match in self.reddit_pattern.finditer(message.content):
+            fixed_links.append(f"https://rxddit.com/{match.group(1)}")
 
-        if changed:
+        if fixed_links:
             try:
-                await message.delete()
+                await message.edit(suppress=True)
 
-                # We put their name in bold so people know who sent it!
-                final_message = f"🗣️ **{message.author.display_name}** küldte:\n{new_content}"
+                final_message = (
+                    f"🗣️ **{message.author.display_name}** küldte:\n" +
+                    "\n".join(fixed_links)
+                )
 
-                # If they replied to someone, we should try to keep the reply context!
-                if message.reference:
-                    await message.channel.send(final_message, reference=message.reference)
-                else:
-                    await message.channel.send(final_message)
-
+                await message.channel.send(final_message)
             except discord.Forbidden:
-                print(f"baj van: Nincs jogom törölni az üzenetet itt: {message.channel.name}")
+                print(f"baj van: Nincs jogom elrejteni az embedet itt: {message.channel.name}")
             except Exception as e:
                 print(f"baj van: {e}")
 
