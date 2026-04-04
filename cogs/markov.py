@@ -41,17 +41,17 @@ class Markov(commands.Cog):
             with open("usr/markov_config.json", "r", encoding='utf-8') as f:
                 self.config = json.load(f)
         except FileNotFoundError:
-            self.config = check_and_set_defaults([])
+            self.config = check_and_set_defaults({})
             with open("usr/markov_config.json", "w") as file:
                 json.dump(self.config, file)
         self.config = check_and_set_defaults(self.config)
 
     @commands.Cog.listener()
     async def on_message(self, message):
+        if message.author.bot or not message.content or message.guild is None:
+            return
         if not os.path.exists(f"usr/markov//{message.guild.id}/"):
             os.mkdir(f"usr/markov//{message.guild.id}/")
-        if message.author.bot or not message.content:
-            return
         if f"<@{self.bot.user.id}>" in message.content:
             if f"<@{self.bot.user.id}> ^" in message.content:
                 seed = message.content.replace(f"<@{self.bot.user.id}> ^", "")

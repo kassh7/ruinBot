@@ -1,3 +1,14 @@
-/.env
-/.venv/
-/usr/
+__pycache__/
+*.py[cod]
+*$py.class
+
+.venv/
+venv/
+env/
+
+.env
+.env-prod
+
+usr/
+food_config.json
+holidays.json
