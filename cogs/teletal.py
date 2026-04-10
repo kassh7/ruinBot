@@ -5,7 +5,9 @@ import json
 import os
 from datetime import datetime, timedelta, time
 from utils.holiday_cache import get_last_workday
+from zoneinfo import ZoneInfo
 
+BUDAPEST_TZ = ZoneInfo("Europe/Budapest")
 CONFIG_FILE = "usr/teletal_config.json"
 
 ROLE_PING = discord.AllowedMentions(roles=True)
@@ -127,7 +129,7 @@ class teletalReminder(commands.Cog):
                     await asyncio.sleep(86400)
                     continue
 
-                next_wake = datetime.now() + timedelta(seconds=sleep_seconds)
+                next_wake = datetime.now(BUDAPEST_TZ) + timedelta(seconds=sleep_seconds)
                 print(f"🍔 Teletál loop alszik {sleep_seconds:.0f} másodpercet, ébredés: {next_wake.strftime('%Y-%m-%d %H:%M')}")
                 await asyncio.sleep(sleep_seconds)
 
@@ -146,7 +148,7 @@ class teletalReminder(commands.Cog):
             return None
 
         last_workday = await get_last_workday()
-        now = datetime.now()
+        now = datetime.now(BUDAPEST_TZ)
 
         trigger_datetimes = []
         for cfg in self.config.values():
@@ -171,7 +173,7 @@ class teletalReminder(commands.Cog):
     async def _fire_reminders(self):
         """Send reminders to all guilds whose trigger time matches right now."""
         last_workday = await get_last_workday()
-        now = datetime.now()
+        now = datetime.now(BUDAPEST_TZ)
 
         if now.date() != last_workday:
             return  # Woke up on the right time but wrong day (shouldn't happen, but be safe)
