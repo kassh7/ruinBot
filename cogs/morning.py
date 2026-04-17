@@ -15,8 +15,7 @@ from urllib3.util.retry import Retry
 from discord.ext import commands, tasks
 from pathlib import Path
 from datetime import date
-from utils.holiday_cache import get_next_holiday, get_week_holidays
-
+from utils.holiday_cache import get_next_holiday, get_week_holidays, get_non_workday_block_label
 utc = datetime.timezone.utc
 try:
     locale.setlocale(locale.LC_COLLATE, "hu_HU.UTF-8")
@@ -204,39 +203,65 @@ async def make_morning_message(command=False):
         embed.add_field(name="Időkép status", value=random.choice(["Befosott az időkép.",
                                                                    "Sírgödörbe lökték az időképet, ráhányják a földet is",
                                                                    "Befosott, behányt, sírgödörbe lökték az időképet"]))
+
     # --- 🇭🇺 ÜNNEPNAPOK ---
     try:
         week_holidays = await get_week_holidays()
         next_holiday = await get_next_holiday()
 
-        if week_holidays:
-            day_names = ["Hétfő", "Kedd", "Szerda", "Csütörtök", "Péntek", "Szombat", "Vasárnap"]
+        upcoming_week_holidays = [h for h in week_holidays if h['days_until'] >= 0]
+        day_names = ["Hétfő", "Kedd", "Szerda", "Csütörtök", "Péntek", "Szombat", "Vasárnap"]
+
+        if upcoming_week_holidays:
             holiday_lines = []
-            for h in week_holidays:
+            for h in upcoming_week_holidays:
                 day_name = day_names[h['date'].weekday()]
+                block_label = await get_non_workday_block_label(h['date'])
+                extra_text = f" - {block_label}" if block_label else ""
+
                 if h['days_until'] == 0:
-                    holiday_lines.append(f"🎉 **MA: {h['localName']}!**")
+                    holiday_lines.append(
+                        f"🎉 **MA: {h['localName']}!** - {day_name}{extra_text}"
+                    )
                 elif h['days_until'] == 1:
-                    holiday_lines.append(f"🎊 Holnap: **{h['localName']}** ({day_name})")
+                    holiday_lines.append(
+                        f"🎊 Holnap: **{h['localName']}** - {h['date'].strftime('%Y.%m.%d')} {day_name}{extra_text}"
+                    )
                 else:
-                    holiday_lines.append(f"📅 {h['localName']} - {h['date'].strftime('%m.%d')} ({day_name})")
-            embed.add_field(name="Munkaszüneti nap ezen a héten! 🇭🇺", value="\n".join(holiday_lines), inline=False)
+                    holiday_lines.append(
+                        f"📅 {h['localName']} - {h['date'].strftime('%Y.%m.%d')} {day_name} ({h['days_until']} nap múlva){extra_text}"
+                    )
+
+            embed.add_field(
+                name="Munkaszüneti nap ezen a héten! 🇭🇺",
+                value="\n".join(holiday_lines),
+                inline=False
+            )
         elif next_holiday:
+            day_name = day_names[next_holiday['date'].weekday()]
+            block_label = await get_non_workday_block_label(next_holiday['date'])
+            extra_text = f" - {block_label}" if block_label else ""
+
             embed.add_field(
                 name="Következő munkaszüneti nap 🇭🇺",
-                value=f"**{next_holiday['localName']}** - {next_holiday['date'].strftime('%Y.%m.%d')} ({next_holiday['days_until']} nap múlva)",
+                value=(
+                    f"{next_holiday['localName']} - "
+                    f"{next_holiday['date'].strftime('%Y.%m.%d')} {day_name} "
+                    f"({next_holiday['days_until']} nap múlva)"
+                    f"{extra_text}"
+                ),
                 inline=False
             )
     except Exception as e:
         print(f"baj van: {e}")
-        
+
     if datetime.date.today().day == 1:
         embed.add_field(name=f"Mától {month}t írunk.", value="", inline=False)
     elif command:
         embed.add_field(name=f"A jelenlegi hónap {month}.", value="", inline=False)
+
     embed.add_field(name=f"Ma {await generate_day()} van.", value="", inline=False)
     return embed
-
 
 def today_namedays(d: date | None = None) -> list[str]:
     d = d or date.today()
