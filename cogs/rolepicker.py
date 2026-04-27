@@ -6,7 +6,7 @@ from discord import app_commands
 from discord.ext import commands
 
 
-DATA_FILE = Path("data/rolepicker_roles.json")
+DATA_FILE = Path("usr/rolepicker_roles.json")
 
 
 class RolePicker(commands.Cog):
