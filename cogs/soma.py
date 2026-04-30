@@ -25,66 +25,111 @@ class Soma(commands.Cog):
         else:
             print(f"File '{self.cd_path}' already exists.")
 
-    @commands.hybrid_command(name="ruin", with_app_command=True,
-                             description="Nemes bátorsággal és hevességgel pörgesd a szerencse kerekét.")
+    @commands.hybrid_command(
+        name="ruin",
+        with_app_command=True,
+        description="Nemes bátorsággal és hevességgel pörgesd a szerencse kerekét."
+    )
     async def soma_color(self, ctx):
         try:
-            file = open(self.cd_path, 'r')
-            cooldown = str(file.readline())
-            file.close()
+            await ctx.defer()
+
+            with open(self.cd_path, "r") as file:
+                cooldown = str(file.readline())
+
             role = discord.utils.get(ctx.guild.roles, name="ruinbot")
             user = ctx.author
+
             personal_cd = await self.check_personal_cooldown(user, ctx)
+
             if role and await self.check_cooldown(cooldown) and personal_cd is True:
                 rgb = random.randint(0, 0xFFFFFF)
                 random_color = discord.Color(rgb)
+
                 await role.edit(color=random_color)
 
                 embed = discord.Embed(title="kapta", colour=random_color)
+
                 img = Image.new(mode="RGB", size=(50, 50), color=f"{random_color}")
                 img.save("usr/soma.png")
+
                 file = discord.File("usr/soma.png")
                 embed.set_image(url="attachment://soma.png")
-                r = requests.get(f"http://www.thecolorapi.com/id?hex={str(random_color)[1:]}")
-                res = r.json()
-                embed.add_field(name="az új szín:", value=f"{res['name']['value']}")
+
+                try:
+                    r = requests.get(
+                        f"https://www.thecolorapi.com/id?hex={str(random_color)[1:]}",
+                        timeout=10,
+                    )
+                    r.raise_for_status()
+                    res = r.json()
+
+                    color_name = res.get("name", {}).get("value", "ismeretlen szín")
+                    embed.add_field(name="az új szín:", value=color_name)
+
+                except (requests.RequestException, ValueError, KeyError) as e:
+                    print(f"Color API error: {e}")
+                    embed.add_field(name="az új szín:", value=str(random_color))
 
                 on_cd_try, normal_try = await self.amount_of_tries(user.id)
                 total_try = on_cd_try + normal_try
+
                 embed.add_field(name=chr(173), value=chr(173))
                 embed.add_field(name="ennyiből lett meg:", value=f"{total_try}")
+
                 if on_cd_try > 0:
                     embed.add_field(name="ennyiszer volt türelmetlen:", value=f"{on_cd_try}")
 
                 await self.count_try(user, 0, ctx)
-
                 await self.make_cooldown_timestamp(ctx)
                 await self.register_win(user, ctx)
+
                 await ctx.send(file=file, embed=embed)
+
             elif isinstance(personal_cd, timedelta):
                 embed = discord.Embed(title="ne spamolj")
+
                 personal_cd = personal_cd + datetime.now()
-                personal_cd = personal_cd.replace(tzinfo=pytz.utc).astimezone(pytz.timezone('Europe/Budapest'))
-                embed.add_field(name="eddig várj még geci",
-                                value=f"{personal_cd.strftime("%H:%M:%S")}")
+                personal_cd = personal_cd.replace(tzinfo=pytz.utc).astimezone(
+                    pytz.timezone("Europe/Budapest")
+                )
+
+                embed.add_field(
+                    name="eddig várj még geci",
+                    value=f"{personal_cd.strftime('%H:%M:%S')}"
+                )
+
                 file = discord.File("res/angry.png")
                 embed.set_image(url="attachment://angry.png")
+
                 await self.count_try(user, 1, ctx)
                 await ctx.send(file=file, embed=embed, delete_after=30)
-                await ctx.message.delete(delay=30)
+
+                if ctx.message:
+                    await ctx.message.delete(delay=30)
+
             else:
                 embed = discord.Embed(title="nem kapta")
                 embed.add_field(name="te haltál", value="")
+
                 file = discord.File("res/kssz-orban-thumb.png")
                 embed.set_image(url="attachment://kssz-orban-thumb.png")
+
                 await self.count_try(user, 0, ctx)
                 await self.incur_personal_cooldown(user, ctx)
+
                 await ctx.send(file=file, embed=embed, delete_after=30)
-                await ctx.message.delete(delay=30)
+
+                if ctx.message:
+                    await ctx.message.delete(delay=30)
 
         except Exception as e:
             print(f"baj van: {e}")
-            await ctx.send(f"baj van: {e}")
+
+            try:
+                await ctx.send(f"baj van: {e}")
+            except discord.HTTPException:
+                pass
 
     @commands.hybrid_command(name="ruinlb", with_app_command=True,
                              description="Legjobban brusztolók tabellája")
