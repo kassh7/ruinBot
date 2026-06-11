@@ -35,6 +35,14 @@ class Markov(commands.Cog):
         self.text_model = {}
         self.bot = bot
 
+        # BOT_FRIENDS: comma-separated bot user IDs that are allowed to talk
+        # to us. Every other bot stays ignored (no accidental loops with
+        # random bots). Example: BOT_FRIENDS=1498350417074196621
+        self.bot_friends = {
+            int(x) for x in os.getenv("BOT_FRIENDS", "").replace(" ", "").split(",")
+            if x.isdigit()
+        }
+
         if not os.path.exists(f"usr/markov/"):
             os.mkdir(f"usr/markov/")
         try:
@@ -48,7 +56,23 @@ class Markov(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message):
-        if message.author.bot or not message.content or message.guild is None:
+        if not message.content or message.guild is None:
+            return
+        if message.author.bot:
+            # Bot-authored messages: only configured bot friends get through,
+            # they can only TRIGGER a reply (mention or reply-to-us), and we
+            # never learn their text into the markov corpus — that would let
+            # two bots echo-train each other.
+            if message.author.id not in self.bot_friends:
+                return
+            mentioned = f"<@{self.bot.user.id}>" in message.content
+            replied_to_us = False
+            if message.type == discord.MessageType.reply and message.reference:
+                reference = await message.channel.fetch_message(
+                    message.reference.message_id)
+                replied_to_us = reference.author.id == self.bot.user.id
+            if mentioned or replied_to_us:
+                await self.markov(message)
             return
         if not os.path.exists(f"usr/markov//{message.guild.id}/"):
             os.mkdir(f"usr/markov//{message.guild.id}/")
@@ -153,7 +177,12 @@ class Markov(commands.Cog):
                 else:
                     sentence = random.choice(urls).strip()
 
-            await ctx.reply(sentence if sentence else "MIT MOND?")
+            # Replying to a bot friend must actually PING it (reply pings are
+            # off by default and main.py suppresses user mentions globally) —
+            # mention-gated bots can't see our reply otherwise. Humans keep
+            # the current no-ping behaviour.
+            await ctx.reply(sentence if sentence else "MIT MOND?",
+                            mention_author=getattr(ctx.author, "bot", False))
         except Exception as e:
             print(f"baj van: {e}")
             await ctx.send(f"baj van: {e}")
