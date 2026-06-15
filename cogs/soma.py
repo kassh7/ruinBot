@@ -46,7 +46,11 @@ class Soma(commands.Cog):
                 rgb = random.randint(0, 0xFFFFFF)
                 random_color = discord.Color(rgb)
 
-                await role.edit(color=random_color)
+                try:
+                    await role.edit(color=random_color)
+                except discord.Forbidden:
+                    await ctx.send("baj van: nincs jogom szerkeszteni a ruinbot role-t")
+                    return
 
                 embed = discord.Embed(title="kapta", colour=random_color)
 
