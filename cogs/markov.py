@@ -306,17 +306,32 @@ class Markov(commands.Cog):
                 "password": os.getenv("IMGFLIP_PASS"),
             }
             seed_box = randint(0, meme["box_count"] - 1)
+            emote_overlays = {}
             for x in range(meme["box_count"]):
                 if seed and x == seed_box:
                     print(f"seed gen")
                     seed = seed.strip()
-                    sentence = await self.make_sentence(ctx.guild.id, start_with=seed, max_words=10, fix_tags=True,
-                                                        no_emotes=True)
+                    sentence = await self.make_sentence(ctx.guild.id, start_with=seed, max_words=10, fix_tags=True)
                 else:
-                    sentence = await self.make_sentence(ctx.guild.id, 10, True, True)
+                    sentence = await self.make_sentence(ctx.guild.id, 10, True)
                 # Provide a default sentence if none is returned
-                text = sanitize_meme_caption(sentence)
+                emotes = self.discord_emote_only_caption(sentence)
+                if emotes:
+                    text = " "
+                    emote_overlays[x] = emotes
+                else:
+                    text = sanitize_meme_caption(sentence)
                 post_json[f"boxes[{x}][text]"] = text
+
+            text_boxes = []
+            if emote_overlays:
+                text_boxes = self.get_imgflip_default_text_boxes(session, meme)
+            for x in range(min(meme["box_count"], len(text_boxes))):
+                box = text_boxes[x]
+                post_json[f"boxes[{x}][x]"] = box["x"]
+                post_json[f"boxes[{x}][y]"] = box["y"]
+                post_json[f"boxes[{x}][width]"] = box["width"]
+                post_json[f"boxes[{x}][height]"] = box["height"]
 
             # Post to imgflip API to generate the meme image
             r = session.post("https://api.imgflip.com/caption_image", data=post_json, timeout=10)
@@ -324,7 +339,15 @@ class Markov(commands.Cog):
             meme_pic = r.json()
 
             if meme_pic["success"]:
-                await ctx.reply(meme_pic["data"]["url"])
+                if emote_overlays:
+                    meme_response = session.get(meme_pic["data"]["url"], timeout=10)
+                    meme_response.raise_for_status()
+                    image = Image.open(BytesIO(meme_response.content)).convert("RGBA")
+                    self.draw_imgflip_emote_overlays(image, emote_overlays, text_boxes, meme["box_count"])
+                    image.save("usr/markovpic.png")
+                    await ctx.reply(file=discord.File("usr/markovpic.png"))
+                else:
+                    await ctx.reply(meme_pic["data"]["url"])
             else:
                 await ctx.reply(f"Imgflip returned an error:\n{meme_pic.get('error_message', 'Unknown error')}")
 
@@ -417,6 +440,150 @@ class Markov(commands.Cog):
         )
         text = re.sub(r"\s+", " ", text).strip()
         return text or "MIT MOND?"
+
+    def discord_emote_only_caption(self, text: str):
+        if not text:
+            return []
+
+        matches = list(DISCORD_EMOTE_RE.finditer(text))
+        if not matches:
+            return []
+
+        remainder = DISCORD_EMOTE_RE.sub("", text).strip()
+        if remainder:
+            return []
+
+        return [
+            {
+                "id": match.group("id"),
+                "animated": bool(match.group("animated")),
+            }
+            for match in matches
+        ]
+
+    def get_imgflip_default_text_boxes(self, session, meme):
+        try:
+            response = session.get(f"https://imgflip.com/memegenerator/{meme['id']}", timeout=10)
+            response.raise_for_status()
+            match = re.search(r"memes=(\[.*?\]);sfw=", response.text, re.DOTALL)
+            if not match:
+                return self.fallback_imgflip_text_boxes(meme)
+
+            templates = json.loads(match.group(1))
+            template = next(
+                (template for template in templates if str(template.get("id")) == str(meme["id"])),
+                None
+            )
+            if not template or not template.get("default_settings"):
+                return self.fallback_imgflip_text_boxes(meme)
+
+            default_settings = json.loads(template["default_settings"])
+            source_width = float(template.get("w", meme["width"]))
+            source_height = float(template.get("h", meme["height"]))
+            return [
+                {
+                    "x": float(box["x"]),
+                    "y": float(box["y"]),
+                    "width": float(box.get("w", box.get("width"))),
+                    "height": float(box.get("h", box.get("height"))),
+                    "vertical_align": box.get("vertical_align", "middle"),
+                    "text_align": box.get("text_align", "center"),
+                    "source_width": source_width,
+                    "source_height": source_height,
+                }
+                for box in default_settings
+                if box.get("type", "text") == "text"
+                and "x" in box
+                and "y" in box
+                and ("w" in box or "width" in box)
+                and ("h" in box or "height" in box)
+            ]
+        except Exception as e:
+            print(f"Failed to load Imgflip template boxes for {meme.get('id')}: {e}")
+            return self.fallback_imgflip_text_boxes(meme)
+
+    @staticmethod
+    def fallback_imgflip_text_boxes(meme):
+        width = float(meme["width"])
+        height = float(meme["height"])
+        box_count = int(meme["box_count"])
+        box_height = max(1, height * 0.25)
+
+        if box_count == 1:
+            centers = [height * 0.5]
+        elif box_count == 2:
+            centers = [height * 0.14, height * 0.86]
+        elif box_count == 3:
+            centers = [height * 0.14, height * 0.5, height * 0.86]
+        else:
+            centers = [height * ((index + 1) / (box_count + 1)) for index in range(box_count)]
+
+        return [
+            {
+                "x": 0,
+                "y": max(0, center - box_height / 2),
+                "width": width,
+                "height": min(box_height, height),
+                "vertical_align": "middle",
+                "text_align": "center",
+                "source_width": width,
+                "source_height": height,
+            }
+            for center in centers
+        ]
+
+    def draw_imgflip_emote_overlays(self, image, emote_overlays, text_boxes, box_count: int):
+        width, height = image.size
+
+        for box_index, emotes in emote_overlays.items():
+            box = self.scaled_imgflip_text_box(text_boxes, box_index, width, height, box_count)
+            emote_height = max(24, min(int(box["height"] * 0.8), int(height * 0.16), 96))
+            rendered_emotes = [
+                self.get_discord_emote(emote["id"], emote["animated"], emote_height)
+                for emote in emotes
+            ]
+            rendered_emotes = [emote for emote in rendered_emotes if emote]
+            if not rendered_emotes:
+                continue
+
+            spacing = max(4, emote_height // 10)
+            total_width = sum(emote.width for emote in rendered_emotes)
+            total_width += spacing * (len(rendered_emotes) - 1)
+            x = round(box["x"] + (box["width"] - total_width) / 2)
+            y = round(self.imgflip_box_center_y(box) - emote_height / 2)
+
+            for emote in rendered_emotes:
+                image.paste(emote, (x, y), emote)
+                x += emote.width + spacing
+
+    @staticmethod
+    def scaled_imgflip_text_box(text_boxes, box_index: int, image_width: int, image_height: int, box_count: int):
+        if box_index < len(text_boxes):
+            box = text_boxes[box_index]
+            scale_x = image_width / max(1, box.get("source_width", image_width))
+            scale_y = image_height / max(1, box.get("source_height", image_height))
+            return {
+                "x": box["x"] * scale_x,
+                "y": box["y"] * scale_y,
+                "width": box["width"] * scale_x,
+                "height": box["height"] * scale_y,
+                "vertical_align": box.get("vertical_align", "middle"),
+            }
+
+        fallback = Markov.fallback_imgflip_text_boxes(
+            {"width": image_width, "height": image_height, "box_count": box_count}
+        )
+        return fallback[min(box_index, len(fallback) - 1)]
+
+    @staticmethod
+    def imgflip_box_center_y(box):
+        vertical_align = box.get("vertical_align", "middle")
+        if vertical_align == "top":
+            return box["y"] + box["height"] * 0.2
+        if vertical_align == "bottom":
+            return box["y"] + box["height"] * 0.8
+
+        return box["y"] + box["height"] / 2
 
     def rich_text_units(self, text: str):
         text = self.clean_demotivator_caption(text)
