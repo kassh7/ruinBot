@@ -21,6 +21,8 @@ import markovify
 
 
 DISCORD_EMOTE_RE = re.compile(r"<(?P<animated>a?):(?P<name>[a-zA-Z0-9_]+):(?P<id>\d+)>")
+EMOJI_FORMAT_CHARS = {"\ufe0f", "\u200d"}
+TWEMOJI_BASE_URL = "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72"
 
 
 def check_and_set_defaults(config):
@@ -62,6 +64,7 @@ class Markov(commands.Cog):
         self.bot = bot
         self.emote_cache = {}
         self.emoji_font_cache = {}
+        self.emoji_image_cache = {}
 
         # BOT_FRIENDS: comma-separated bot user IDs that are allowed to talk
         # to us. Every other bot stays ignored (no accidental loops with
@@ -483,28 +486,169 @@ class Markov(commands.Cog):
         self.emote_cache[cache_key] = emote
         return emote
 
-    def get_emoji_font(self, size: int):
+    @staticmethod
+    def font_mask_signature(font, text: str):
+        mask = font.getmask(text)
+        return mask.size, bytes(mask)
+
+    def font_supports_text(self, font, text: str) -> bool:
+        try:
+            missing_signature = self.font_mask_signature(font, "\uffff")
+        except Exception:
+            missing_signature = None
+
+        for char in text:
+            if char in EMOJI_FORMAT_CHARS:
+                continue
+
+            try:
+                if font.getmask(char).getbbox() is None:
+                    return False
+                if missing_signature and self.font_mask_signature(font, char) == missing_signature:
+                    return False
+            except Exception:
+                return False
+
+        return True
+
+    def get_emoji_fonts(self, size: int):
         if size in self.emoji_font_cache:
             return self.emoji_font_cache[size]
 
-        emoji_font = None
+        emoji_fonts = []
         for font_path in (
             "C:/Windows/Fonts/seguiemj.ttf",
             "C:/Windows/Fonts/seguisym.ttf",
             "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
             "/usr/share/fonts/truetype/noto/NotoEmoji-Regular.ttf",
+            "res/DejaVuSans.ttf",
         ):
             if not os.path.exists(font_path):
                 continue
 
             try:
-                emoji_font = ImageFont.truetype(font_path, size)
-                break
+                emoji_fonts.append(ImageFont.truetype(font_path, size))
             except Exception:
                 continue
 
-        self.emoji_font_cache[size] = emoji_font
-        return emoji_font
+        self.emoji_font_cache[size] = emoji_fonts
+        return emoji_fonts
+
+    def get_emoji_font(self, size: int, text: str):
+        for emoji_font in self.get_emoji_fonts(size):
+            if self.font_supports_text(emoji_font, text):
+                return emoji_font
+
+        return None
+
+    def draw_text(self, draw, position, text: str, font, fill: str):
+        try:
+            draw.text(position, text, fill=fill, font=font, embedded_color=True)
+        except TypeError:
+            draw.text(position, text, fill=fill, font=font)
+
+    @staticmethod
+    def is_emoji_modifier(char: str) -> bool:
+        codepoint = ord(char)
+        return 0x1f3fb <= codepoint <= 0x1f3ff
+
+    @staticmethod
+    def is_regional_indicator(char: str) -> bool:
+        codepoint = ord(char)
+        return 0x1f1e6 <= codepoint <= 0x1f1ff
+
+    @staticmethod
+    def iter_emoji_clusters(text: str):
+        index = 0
+        while index < len(text):
+            start = index
+            index += 1
+
+            if index < len(text) and text[index] == "\ufe0f":
+                index += 1
+            if index < len(text) and Markov.is_emoji_modifier(text[index]):
+                index += 1
+            if index < len(text) and text[index] == "\u20e3":
+                index += 1
+
+            if Markov.is_regional_indicator(text[start]) and index < len(text) and Markov.is_regional_indicator(text[index]):
+                index += 1
+
+            while index < len(text) and text[index] == "\u200d":
+                index += 1
+                if index >= len(text):
+                    break
+                index += 1
+                if index < len(text) and text[index] == "\ufe0f":
+                    index += 1
+                if index < len(text) and Markov.is_emoji_modifier(text[index]):
+                    index += 1
+
+            yield text[start:index]
+
+    @staticmethod
+    def emoji_asset_key(sequence: str) -> str:
+        return "-".join(f"{ord(char):x}" for char in sequence)
+
+    @staticmethod
+    def emoji_asset_key_candidates(sequence: str):
+        candidates = [Markov.emoji_asset_key(sequence)]
+        without_text_modifiers = sequence.replace("\ufe0f", "")
+        if without_text_modifiers != sequence:
+            candidates.append(Markov.emoji_asset_key(without_text_modifiers))
+        return candidates
+
+    def get_emoji_image(self, sequence: str, height: int):
+        for asset_key in self.emoji_asset_key_candidates(sequence):
+            cache_key = (asset_key, height)
+            if cache_key in self.emoji_image_cache:
+                emoji = self.emoji_image_cache[cache_key]
+                if emoji:
+                    return emoji
+                continue
+
+            try:
+                response = requests.get(f"{TWEMOJI_BASE_URL}/{asset_key}.png", timeout=5)
+                response.raise_for_status()
+                emoji = Image.open(BytesIO(response.content)).convert("RGBA")
+                ratio = height / emoji.height
+                width = max(1, int(emoji.width * ratio))
+                emoji = emoji.resize((width, height), Image.Resampling.LANCZOS)
+            except Exception:
+                emoji = None
+
+            self.emoji_image_cache[cache_key] = emoji
+            if emoji:
+                return emoji
+
+        return None
+
+    def measure_emoji_text(self, text: str, font) -> float:
+        width = 0
+        for sequence in self.iter_emoji_clusters(text):
+            emoji = self.get_emoji_image(sequence, font.size)
+            if emoji:
+                width += emoji.width + 2
+                continue
+
+            emoji_font = self.get_emoji_font(font.size, sequence) or font
+            width += emoji_font.getlength(sequence)
+
+        return width
+
+    def draw_emoji_text(self, image, draw, text: str, x: float, y: float, font, fill: str) -> float:
+        for sequence in self.iter_emoji_clusters(text):
+            emoji = self.get_emoji_image(sequence, font.size)
+            if emoji:
+                image.paste(emoji, (round(x), round(y)), emoji)
+                x += emoji.width + 2
+                continue
+
+            emoji_font = self.get_emoji_font(font.size, sequence) or font
+            self.draw_text(draw, (x, y), sequence, emoji_font, fill)
+            x += emoji_font.getlength(sequence)
+
+        return x
 
     def measure_rich_unit(self, unit, font):
         if unit["type"] == "emote":
@@ -512,9 +656,7 @@ class Markov(commands.Cog):
             return emote.width + 4 if emote else 0
 
         if unit["type"] == "emoji":
-            emoji_font = self.get_emoji_font(font.size)
-            if emoji_font:
-                return emoji_font.getlength(unit["text"])
+            return self.measure_emoji_text(unit["text"], font)
 
         return font.getlength(unit["text"])
 
@@ -606,9 +748,13 @@ class Markov(commands.Cog):
 
                 continue
             else:
-                text_font = self.get_emoji_font(font.size) if unit["type"] == "emoji" else font
+                if unit["type"] == "emoji":
+                    x = self.draw_emoji_text(image, draw, unit["text"], x, y, font, fill)
+                    continue
+
+                text_font = self.get_emoji_font(font.size, unit["text"]) if unit["type"] == "emoji" else font
                 text_font = text_font or font
-                draw.text((x, y), unit["text"], fill=fill, font=text_font)
+                self.draw_text(draw, (x, y), unit["text"], text_font, fill)
                 x += text_font.getlength(unit["text"])
 
     @commands.hybrid_command(name="check_logs", with_app_command=True,
