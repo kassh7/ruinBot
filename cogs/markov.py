@@ -2,7 +2,7 @@ import json
 import math
 import random
 import re
-import textwrap
+import unicodedata
 from datetime import datetime, timedelta
 from io import BytesIO
 from random import randint
@@ -20,6 +20,9 @@ from discord.ext import commands
 import markovify
 
 
+DISCORD_EMOTE_RE = re.compile(r"<(?P<animated>a?):(?P<name>[a-zA-Z0-9_]+):(?P<id>\d+)>")
+
+
 def check_and_set_defaults(config):
     defaults = dict(state_size=1, tries=100, test_output=False, min_words=1, excluded_channels=[])
 
@@ -30,10 +33,35 @@ def check_and_set_defaults(config):
     return config
 
 
+def sanitize_meme_caption(text: str, fallback: str = "MIT MOND?") -> str:
+    if not text:
+        return fallback
+
+    if re.search(r"[\u00c3\u00c2\u00e2\u00f0]", text):
+        try:
+            text = text.encode("cp1252").decode("utf-8")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            pass
+
+    text = DISCORD_EMOTE_RE.sub("", text)
+    text = "".join(
+        char
+        for char in text
+        if unicodedata.category(char)[0] not in {"C", "S"}
+    )
+    text = re.sub(r"\s+", " ", text).strip()
+
+    if not re.search(r"[A-Za-z0-9\u00c0-\u017e]", text):
+        return fallback
+    return text
+
+
 class Markov(commands.Cog):
     def __init__(self, bot):
         self.text_model = {}
         self.bot = bot
+        self.emote_cache = {}
+        self.emoji_font_cache = {}
 
         # BOT_FRIENDS: comma-separated bot user IDs that are allowed to talk
         # to us. Every other bot stays ignored (no accidental loops with
@@ -284,7 +312,7 @@ class Markov(commands.Cog):
                 else:
                     sentence = await self.make_sentence(ctx.guild.id, 10, True, True)
                 # Provide a default sentence if none is returned
-                text = sentence if sentence else "MIT MOND?"
+                text = sanitize_meme_caption(sentence)
                 post_json[f"boxes[{x}][text]"] = text
 
             # Post to imgflip API to generate the meme image
@@ -348,23 +376,17 @@ class Markov(commands.Cog):
 
             # Add text
             draw = ImageDraw.Draw(template)
-            font1 = ImageFont.truetype("res/DejaVuSans.ttf", 45)
-            font2 = ImageFont.truetype("res/DejaVuSans.ttf", 30)
-            text1 = await self.make_sentence(ctx.guild.id, 10, fix_tags=True, no_emotes=True)
-            text2 = await self.make_sentence(ctx.guild.id, 10, fix_tags=True, no_emotes=True)
-            lines1 = textwrap.wrap(text1, width=30)
-            lines2 = textwrap.wrap(text2, width=45)
-
-            text1_y = 470 if len(lines1) == 1 else 455
-            text2_y = 540 if len(lines2) == 1 else 530
+            text1 = await self.make_sentence(ctx.guild.id, 10, fix_tags=True)
+            text2 = await self.make_sentence(ctx.guild.id, 10, fix_tags=True)
+            caption_layout = self.layout_demotivator_captions(draw, text1, text2)
 
             # Write text onto the template 466 , 511
-            for i in range(len(lines1)):
-                text1_x = 375 - font1.getlength(lines1[i]) // 2
-                draw.multiline_text((text1_x, text1_y + i * 35), lines1[i], fill="white", font=font1, align="center")
-            for i in range(len(lines2)):
-                text2_x = 375 - font2.getlength(lines2[i]) // 2
-                draw.multiline_text((text2_x, text2_y + i * 35), lines2[i], fill="white", font=font2, align="center")
+            for i, line in enumerate(caption_layout["title_lines"]):
+                y = caption_layout["title_y"] + i * caption_layout["title_line_height"]
+                self.draw_rich_line(template, draw, line, 375, y, caption_layout["title_font"], "white")
+            for i, line in enumerate(caption_layout["subtitle_lines"]):
+                y = caption_layout["subtitle_y"] + i * caption_layout["subtitle_line_height"]
+                self.draw_rich_line(template, draw, line, 375, y, caption_layout["subtitle_font"], "white")
 
             # Save the final image
             template.save("usr/demotivator.png")
@@ -374,6 +396,220 @@ class Markov(commands.Cog):
         except Exception as e:
             print(f"baj van: {e}")
             await ctx.send(f"baj van: {e}")
+
+    def clean_demotivator_caption(self, text: str) -> str:
+        if not text:
+            return "MIT MOND?"
+
+        if re.search(r"[\u00c3\u00c2\u00e2\u00f0]", text):
+            try:
+                text = text.encode("cp1252").decode("utf-8")
+            except (UnicodeEncodeError, UnicodeDecodeError):
+                pass
+
+        text = "".join(
+            char
+            for char in text
+            if unicodedata.category(char) not in {"Cc", "Cs", "Cn"}
+        )
+        text = re.sub(r"\s+", " ", text).strip()
+        return text or "MIT MOND?"
+
+    def rich_text_units(self, text: str):
+        text = self.clean_demotivator_caption(text)
+        position = 0
+
+        for match in DISCORD_EMOTE_RE.finditer(text):
+            if match.start() > position:
+                yield from self.plain_text_units(text[position:match.start()])
+
+            yield {
+                "type": "emote",
+                "raw": match.group(0),
+                "id": match.group("id"),
+                "animated": bool(match.group("animated")),
+            }
+            position = match.end()
+
+        if position < len(text):
+            yield from self.plain_text_units(text[position:])
+
+    @staticmethod
+    def plain_text_units(text: str):
+        for unit in re.findall(r"\S+|\s+", text):
+            if unit.isspace():
+                yield {"type": "space", "text": " "}
+                continue
+
+            current_type = None
+            current_text = ""
+            for char in unit:
+                char_type = "emoji" if Markov.is_emoji_char(char) else "text"
+                if current_type and char_type != current_type:
+                    yield {"type": current_type, "text": current_text}
+                    current_text = ""
+
+                current_type = char_type
+                current_text += char
+
+            if current_text:
+                yield {"type": current_type, "text": current_text}
+
+    @staticmethod
+    def is_emoji_char(char: str) -> bool:
+        return unicodedata.category(char)[0] == "S" or char in {"\ufe0f", "\u200d"}
+
+    def get_discord_emote(self, emote_id: str, animated: bool, height: int):
+        cache_key = (emote_id, animated, height)
+        if cache_key in self.emote_cache:
+            return self.emote_cache[cache_key]
+
+        extension = "gif" if animated else "png"
+        url = f"https://cdn.discordapp.com/emojis/{emote_id}.{extension}"
+
+        try:
+            response = requests.get(url, timeout=5)
+            response.raise_for_status()
+            emote = Image.open(BytesIO(response.content))
+            emote.seek(0)
+            emote = emote.convert("RGBA")
+            ratio = height / emote.height
+            width = max(1, int(emote.width * ratio))
+            emote = emote.resize((width, height), Image.Resampling.LANCZOS)
+        except Exception as e:
+            print(f"Failed to load Discord emote {emote_id}: {e}")
+            emote = None
+
+        self.emote_cache[cache_key] = emote
+        return emote
+
+    def get_emoji_font(self, size: int):
+        if size in self.emoji_font_cache:
+            return self.emoji_font_cache[size]
+
+        emoji_font = None
+        for font_path in (
+            "C:/Windows/Fonts/seguiemj.ttf",
+            "C:/Windows/Fonts/seguisym.ttf",
+            "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
+            "/usr/share/fonts/truetype/noto/NotoEmoji-Regular.ttf",
+        ):
+            if not os.path.exists(font_path):
+                continue
+
+            try:
+                emoji_font = ImageFont.truetype(font_path, size)
+                break
+            except Exception:
+                continue
+
+        self.emoji_font_cache[size] = emoji_font
+        return emoji_font
+
+    def measure_rich_unit(self, unit, font):
+        if unit["type"] == "emote":
+            emote = self.get_discord_emote(unit["id"], unit["animated"], font.size)
+            return emote.width + 4 if emote else 0
+
+        if unit["type"] == "emoji":
+            emoji_font = self.get_emoji_font(font.size)
+            if emoji_font:
+                return emoji_font.getlength(unit["text"])
+
+        return font.getlength(unit["text"])
+
+    def layout_demotivator_captions(self, draw, title: str, subtitle: str):
+        caption_top = 455
+        caption_bottom = 596
+        caption_height = caption_bottom - caption_top
+        min_gap = 8
+        title_font = ImageFont.truetype("res/DejaVuSans.ttf", 45)
+        subtitle_font = ImageFont.truetype("res/DejaVuSans.ttf", 30)
+        title_lines = self.wrap_rich_text(title, title_font, max_width=650)
+        subtitle_lines = self.wrap_rich_text(subtitle, subtitle_font, max_width=650)
+
+        if len(title_lines) > 1 or len(subtitle_lines) > 1:
+            title_font = ImageFont.truetype("res/DejaVuSans.ttf", 32)
+            subtitle_font = ImageFont.truetype("res/DejaVuSans.ttf", 21)
+            title_lines = self.wrap_rich_text(title, title_font, max_width=650)
+            subtitle_lines = self.wrap_rich_text(subtitle, subtitle_font, max_width=650)
+
+        title_line_height = self.rich_line_height(draw, title_font)
+        subtitle_line_height = self.rich_line_height(draw, subtitle_font)
+        title_height = len(title_lines) * title_line_height
+        subtitle_height = len(subtitle_lines) * subtitle_line_height
+        total_height = title_height + min_gap + subtitle_height
+        start_y = caption_top + max(0, (caption_height - total_height) // 2)
+
+        return {
+            "title_font": title_font,
+            "subtitle_font": subtitle_font,
+            "title_lines": title_lines,
+            "subtitle_lines": subtitle_lines,
+            "title_line_height": title_line_height,
+            "subtitle_line_height": subtitle_line_height,
+            "title_y": start_y,
+            "subtitle_y": start_y + title_height + min_gap,
+        }
+
+    @staticmethod
+    def rich_line_height(draw, font):
+        bbox = draw.textbbox((0, 0), "Ág", font=font)
+        return (bbox[3] - bbox[1]) + 4
+
+    def wrap_rich_text(self, text: str, font, max_width: int):
+        lines = []
+        current_line = []
+        current_width = 0
+
+        for unit in self.rich_text_units(text):
+            if unit["type"] == "space" and not current_line:
+                continue
+
+            unit_width = self.measure_rich_unit(unit, font)
+            if current_line and current_width + unit_width > max_width:
+                while current_line and current_line[-1]["type"] == "space":
+                    current_width -= self.measure_rich_unit(current_line.pop(), font)
+
+                lines.append(current_line)
+                current_line = []
+                current_width = 0
+
+                if unit["type"] == "space":
+                    continue
+
+            current_line.append(unit)
+            current_width += unit_width
+
+        while current_line and current_line[-1]["type"] == "space":
+            current_line.pop()
+
+        if current_line:
+            lines.append(current_line)
+
+        if not lines:
+            return self.wrap_rich_text("MIT MOND?", font, max_width)
+
+        return lines
+
+    def draw_rich_line(self, image, draw, line, center_x: int, y: int, font, fill: str):
+        total_width = sum(self.measure_rich_unit(unit, font) for unit in line)
+        x = center_x - total_width / 2
+
+        for unit in line:
+            if unit["type"] == "emote":
+                emote = self.get_discord_emote(unit["id"], unit["animated"], font.size)
+                if emote:
+                    image.paste(emote, (round(x), round(y)), emote)
+                    x += emote.width + 4
+                    continue
+
+                continue
+            else:
+                text_font = self.get_emoji_font(font.size) if unit["type"] == "emoji" else font
+                text_font = text_font or font
+                draw.text((x, y), unit["text"], fill=fill, font=text_font)
+                x += text_font.getlength(unit["text"])
 
     @commands.hybrid_command(name="check_logs", with_app_command=True,
                              description="megmondja mekkorák a fileok")
@@ -458,7 +694,7 @@ class Markov(commands.Cog):
             sentence = re.sub(pattern, replacer, sentence)
 
         if no_emotes:
-            emote_pattern = r"<(?:a:)?[a-zA-Z0-9_]+:\d+>"
+            emote_pattern = DISCORD_EMOTE_RE
             while re.search(emote_pattern, sentence):
                 print(f"emote detected {sentence}")
                 # Remove the emote-like substring(s)
