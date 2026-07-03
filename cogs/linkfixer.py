@@ -8,23 +8,95 @@ import discord
 from discord.ext import commands
 
 
+X_EMBED_DOMAINS = (
+    "fxtwitter.com",
+    "vxtwitter.com",
+    "fixupx.com",
+    "girlcockx.com",
+    "hitlerx.com",
+    "cunnyx.com",
+    "stupidpenisx.com",
+)
+INSTAGRAM_EMBED_DOMAINS = ("kkinstagram.com", "ddinstagram.com")
+REDDIT_EMBED_DOMAINS = ("vxreddit.com", "rxddit.com")
+EMBED_DOMAIN_GROUPS = (
+    X_EMBED_DOMAINS,
+    INSTAGRAM_EMBED_DOMAINS,
+    REDDIT_EMBED_DOMAINS,
+)
+
+
 class LinkFixerView(discord.ui.View):
-    def __init__(self, cog, original_message: discord.Message, fixed_links: list[str], delay: int = 5):
+    def __init__(
+        self,
+        cog,
+        original_message: discord.Message,
+        fixed_links: list[str],
+        delay: int = 5,
+        fallback_timeout: int = 20,
+    ):
         super().__init__(timeout=60)
         self.cog = cog
         self.original_message = original_message
         self.fixed_links = fixed_links
         self.delay = delay
+        self.fallback_timeout = fallback_timeout
         self.suppression_cancelled = False
         self.bot_message: discord.Message | None = None
 
         self._suppress_task = asyncio.create_task(self.delayed_suppress())
-        # Remove refresh button if all links are vxreddit
-        if all("vxreddit.com" in link for link in self.fixed_links):
-            for item in self.children:
-                if isinstance(item, discord.ui.Button) and item.custom_id == "refresh_embed":
-                    self.remove_item(item)
-                    break
+        self._fallback_task: asyncio.Task | None = None
+        if any(self.is_supported_embed_link(link) for link in self.fixed_links):
+            self.restart_fallback_timeout()
+        else:
+            self.remove_button("try_another_embedder")
+
+    def restart_fallback_timeout(self):
+        if self._fallback_task and not self._fallback_task.done():
+            self._fallback_task.cancel()
+        self._fallback_task = asyncio.create_task(
+            self.remove_fallback_button_after(self.fallback_timeout)
+        )
+
+    def remove_button(self, custom_id: str) -> bool:
+        for item in self.children:
+            if isinstance(item, discord.ui.Button) and item.custom_id == custom_id:
+                self.remove_item(item)
+                return True
+        return False
+
+    @staticmethod
+    def is_supported_embed_link(link: str) -> bool:
+        hostname = urlparse(link).hostname
+        return any(hostname in domains for domains in EMBED_DOMAIN_GROUPS)
+
+    @staticmethod
+    def use_another_embedder(link: str) -> str:
+        parsed = urlparse(link)
+        current_domain = parsed.hostname
+        for domains in EMBED_DOMAIN_GROUPS:
+            if current_domain not in domains:
+                continue
+
+            alternatives = [domain for domain in domains if domain != current_domain]
+            new_domain = random.choice(alternatives)
+            return urlunparse(parsed._replace(netloc=new_domain))
+
+        return link
+
+    async def remove_fallback_button_after(self, timeout: int):
+        try:
+            await asyncio.sleep(timeout)
+            if not self.remove_button("try_another_embedder"):
+                return
+            if self.bot_message:
+                await self.bot_message.edit(view=self)
+        except asyncio.CancelledError:
+            pass
+        except (discord.Forbidden, discord.NotFound):
+            pass
+        except Exception as e:
+            print(f"baj van fallback button eltávolítása közben: {e}")
 
     async def delayed_suppress(self):
         try:
@@ -35,11 +107,7 @@ class LinkFixerView(discord.ui.View):
 
             await self.original_message.edit(suppress=True)
 
-            # Properly remove the "Keep original" button
-            for item in self.children:
-                if isinstance(item, discord.ui.Button) and item.custom_id == "keep_original":
-                    self.remove_item(item)
-                    break
+            self.remove_button("keep_original")
 
             if self.bot_message:
                 await self.bot_message.edit(view=self)
@@ -82,6 +150,8 @@ class LinkFixerView(discord.ui.View):
 
         if self._suppress_task and not self._suppress_task.done():
             self._suppress_task.cancel()
+        if self._fallback_task and not self._fallback_task.done():
+            self._fallback_task.cancel()
 
         try:
             await interaction.response.defer()
@@ -99,24 +169,22 @@ class LinkFixerView(discord.ui.View):
         self.stop()
 
     @discord.ui.button(
-        label="Refresh embed",
+        label="Try another embedder",
         style=discord.ButtonStyle.primary,
-        custom_id="refresh_embed"
+        custom_id="try_another_embedder"
     )
-    async def refresh_embed(
+    async def try_another_embedder(
             self,
             interaction: discord.Interaction,
             button: discord.ui.Button
     ):
-        refreshed_links = []
-
-        for link in self.fixed_links:
-            if "vxreddit.com" in link:
-                refreshed_links.append(link)
-            else:
-                refreshed_links.append(self.add_cache_buster(link))
-
-        self.fixed_links = refreshed_links
+        self.restart_fallback_timeout()
+        self.fixed_links = [
+            self.add_cache_buster(self.use_another_embedder(link))
+            if self.is_supported_embed_link(link)
+            else link
+            for link in self.fixed_links
+        ]
 
         try:
             await interaction.response.edit_message(
@@ -159,17 +227,8 @@ class LinkFixer(commands.Cog):
         fixed_links = []
 
         # --- TWITTER / X FIX ---
-        x_domains = [
-            "fxtwitter.com",
-            "vxtwitter.com",
-            "fixupx.com",
-            "girlcockx.com",
-            "hitlerx.com",
-            "cunnyx.com",
-            "stupidpenisx.com"
-        ]
         for match in self.x_pattern.finditer(message.content):
-            domain = random.choice(x_domains)
+            domain = random.choice(X_EMBED_DOMAINS)
             fixed_links.append(f"https://{domain}/{match.group(1)}")
 
         # --- INSTAGRAM FIX ---

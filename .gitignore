@@ -5,6 +5,7 @@ __pycache__/
 .venv/
 venv/
 env/
+.idea/
 
 .env
 .env-prod
@@ -12,3 +13,4 @@ env/
 usr/
 food_config.json
 holidays.json
+ruinbot.log
