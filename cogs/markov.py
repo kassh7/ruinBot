@@ -1,3 +1,4 @@
+import asyncio
 import json
 import math
 import random
@@ -65,6 +66,9 @@ class Markov(commands.Cog):
         self.emote_cache = {}
         self.emoji_font_cache = {}
         self.emoji_image_cache = {}
+        self.imgflip_template_cache = None
+        self.imgflip_template_id_cache = {}
+        self.imgflip_autocomplete_debounce = {}
 
         # BOT_FRIENDS: comma-separated bot user IDs that are allowed to talk
         # to us. Every other bot stays ignored (no accidental loops with
@@ -84,6 +88,136 @@ class Markov(commands.Cog):
             with open("usr/markov_config.json", "w") as file:
                 json.dump(self.config, file)
         self.config = check_and_set_defaults(self.config)
+
+        self.demotivator_context_menu = app_commands.ContextMenu(
+            name="Make Demotivator",
+            callback=self.make_demotivator_from_message,
+        )
+        self.bot.tree.add_command(self.demotivator_context_menu)
+
+    async def cog_unload(self):
+        self.bot.tree.remove_command(
+            self.demotivator_context_menu.name,
+            type=self.demotivator_context_menu.type,
+        )
+
+    async def imgflip_template_autocomplete(
+        self,
+        interaction: discord.Interaction,
+        current: str,
+    ):
+        try:
+            if self.imgflip_template_cache is None:
+                response = await asyncio.to_thread(
+                    requests.get,
+                    "https://api.imgflip.com/get_memes",
+                    timeout=5,
+                )
+                response.raise_for_status()
+                self.imgflip_template_cache = response.json()["data"]["memes"]
+        except (requests.RequestException, KeyError, ValueError):
+            self.imgflip_template_cache = []
+
+        query = current.casefold().strip()
+        matches = [
+            meme for meme in self.imgflip_template_cache
+            if query in meme["name"].casefold() or query == str(meme["id"])
+        ]
+
+        if query.isdigit() and len(query) >= 5 and not matches:
+            debounce_key = (
+                interaction.user.id,
+                getattr(interaction.command, "qualified_name", "template"),
+            )
+            debounce_token = object()
+            self.imgflip_autocomplete_debounce[debounce_key] = debounce_token
+            await asyncio.sleep(0.5)
+            if self.imgflip_autocomplete_debounce.get(debounce_key) is not debounce_token:
+                return []
+
+            if query not in self.imgflip_template_id_cache:
+                try:
+                    self.imgflip_template_id_cache[query] = await asyncio.wait_for(
+                        asyncio.to_thread(
+                            self.get_imgflip_template_by_id,
+                            requests.Session(),
+                            query,
+                            2,
+                        ),
+                        timeout=2.5,
+                    )
+                except asyncio.TimeoutError:
+                    if self.imgflip_autocomplete_debounce.get(debounce_key) is debounce_token:
+                        self.imgflip_autocomplete_debounce.pop(debounce_key, None)
+                    return []
+
+            if self.imgflip_autocomplete_debounce.get(debounce_key) is not debounce_token:
+                return []
+            self.imgflip_autocomplete_debounce.pop(debounce_key, None)
+
+            resolved_template = self.imgflip_template_id_cache[query]
+            if resolved_template:
+                matches.insert(0, resolved_template)
+
+        return [
+            app_commands.Choice(
+                name=(
+                    f'{meme["name"][:97 - len(str(meme["id"]))]} '
+                    f'— {meme["id"]}'
+                ),
+                value=str(meme["id"]),
+            )
+            for meme in matches[:25]
+        ]
+
+    @app_commands.command(name="meme", description="Alias for /markovpic")
+    @app_commands.describe(
+        seed="Optional text to steer one of the generated captions",
+        template="Search for a specific Imgflip meme template",
+    )
+    @app_commands.autocomplete(template=imgflip_template_autocomplete)
+    async def meme(
+        self,
+        interaction: discord.Interaction,
+        seed: str = None,
+        template: str = None,
+    ):
+        ctx = await commands.Context.from_interaction(interaction)
+        await self.markov_pic(ctx, seed=seed, template=template)
+
+    async def make_demotivator_from_message(
+        self,
+        interaction: discord.Interaction,
+        message: discord.Message,
+    ):
+        image_url = self.get_message_image_url(message)
+        if image_url is None:
+            await interaction.response.send_message(
+                "This message does not contain an image.",
+                ephemeral=True,
+            )
+            return
+
+        ctx = await commands.Context.from_interaction(interaction)
+        await self.demotivator(ctx, image_url=image_url)
+
+    @staticmethod
+    def get_message_image_url(message: discord.Message):
+        for attachment in message.attachments:
+            if attachment.content_type and attachment.content_type.startswith("image/"):
+                return attachment.url
+
+            filename = attachment.filename.lower()
+            if filename.endswith((".png", ".jpg", ".jpeg", ".gif", ".webp")):
+                return attachment.url
+
+        for embed in message.embeds:
+            if embed.image.url:
+                return embed.image.url
+            if embed.thumbnail.url:
+                return embed.thumbnail.url
+
+        return None
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -276,7 +410,9 @@ class Markov(commands.Cog):
 
     @commands.hybrid_command(name="markovpic", with_app_command=True,
                              description="Generates an image with generated text")
-    async def markov_pic(self, ctx, seed: str = None):
+    @app_commands.describe(template="Search for a specific Imgflip meme template")
+    @app_commands.autocomplete(template=imgflip_template_autocomplete)
+    async def markov_pic(self, ctx, seed: str = None, template: str = None):
         try:
             if ctx.interaction:
                 await ctx.interaction.response.defer()
@@ -297,9 +433,29 @@ class Markov(commands.Cog):
             r = session.get("https://api.imgflip.com/get_memes", timeout=10)
             r.raise_for_status()  # Will raise an HTTPError if the status is not 200
             memes = r.json()
+            self.imgflip_template_cache = memes["data"]["memes"]
 
-            meme_num = randint(0, 99)
-            meme = memes["data"]["memes"][meme_num]
+            if template:
+                template_query = template.casefold().strip()
+                meme = next(
+                    (
+                        candidate
+                        for candidate in self.imgflip_template_cache
+                        if str(candidate["id"]) == template_query
+                        or candidate["name"].casefold() == template_query
+                    ),
+                    None,
+                )
+                if meme is None and template_query.isdigit():
+                    meme = self.get_imgflip_template_by_id(session, template_query)
+                if meme is None:
+                    await ctx.reply(
+                        f'No Imgflip template found for "{template}". '
+                        "Use the template picker to select one."
+                    )
+                    return
+            else:
+                meme = random.choice(self.imgflip_template_cache)
             post_json = {
                 "template_id": meme["id"],
                 "username": os.getenv("IMGFLIP_USER"),
@@ -362,6 +518,44 @@ class Markov(commands.Cog):
         except Exception as e:
             print(f"baj van: {e}")
             await ctx.send(f"baj van: {e}")
+
+    @staticmethod
+    def get_imgflip_template_by_id(session, template_id: str, timeout: int = 10):
+        try:
+            response = session.get(
+                f"https://imgflip.com/memegenerator/{template_id}",
+                timeout=timeout,
+            )
+            response.raise_for_status()
+            match = re.search(r"memes=(\{.*?\});sfw=", response.text, re.DOTALL)
+            if not match:
+                return None
+
+            templates = json.loads(match.group(1)).values()
+            template = next(
+                (
+                    candidate for candidate in templates
+                    if str(candidate.get("id")) == template_id
+                ),
+                None,
+            )
+            if template is None:
+                return None
+
+            default_settings = json.loads(template.get("default_settings") or "[]")
+            box_count = sum(
+                setting.get("type", "text") == "text"
+                for setting in default_settings
+            )
+            return {
+                "id": str(template["id"]),
+                "name": template.get("name", f"Template {template_id}"),
+                "width": int(template["w"]),
+                "height": int(template["h"]),
+                "box_count": max(1, box_count),
+            }
+        except (requests.RequestException, KeyError, TypeError, ValueError, json.JSONDecodeError):
+            return None
 
     @commands.hybrid_command(name="demotivator", with_app_command=True,
                              description="demotiváló nukáló")
@@ -465,11 +659,13 @@ class Markov(commands.Cog):
         try:
             response = session.get(f"https://imgflip.com/memegenerator/{meme['id']}", timeout=10)
             response.raise_for_status()
-            match = re.search(r"memes=(\[.*?\]);sfw=", response.text, re.DOTALL)
+            match = re.search(r"memes=(\[.*?\]|\{.*?\});sfw=", response.text, re.DOTALL)
             if not match:
                 return self.fallback_imgflip_text_boxes(meme)
 
             templates = json.loads(match.group(1))
+            if isinstance(templates, dict):
+                templates = templates.values()
             template = next(
                 (template for template in templates if str(template.get("id")) == str(meme["id"])),
                 None
