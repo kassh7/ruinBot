@@ -166,7 +166,7 @@ class SteamRelease(commands.Cog):
             end_time=game.release_at + timedelta(hours=1),
             entity_type=discord.EntityType.external,
             privacy_level=discord.PrivacyLevel.guild_only,
-            location="Steam",
+            location=game.store_url,
             image=image,
             reason="Game release event requested through ruinBot",
         )
