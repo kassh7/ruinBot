@@ -6,6 +6,7 @@ from typing import Optional
 
 import aiohttp
 import discord
+import pytz
 from bs4 import BeautifulSoup
 from discord.ext import commands
 
@@ -15,6 +16,24 @@ STEAM_APP_URL = re.compile(
 )
 STEAM_APP_ID = re.compile(r"^\d+$")
 DATE_FORMATS = ("%d %b, %Y", "%b %d, %Y", "%d %B, %Y", "%B %d, %Y")
+
+# Manually maintained from the user's ARPG Timeline game-picker screenshot.
+# Only a browser link is provided; the bot never requests Timeline data.
+ARPG_TIMELINE_URL = "https://www.arpg-timeline.com/"
+ARPG_TIMELINE_GAMES = (
+    "Diablo II: Resurrected", "Diablo III", "Diablo IV", "Dwarven Realms",
+    "Hero Siege", "Last Epoch", "Path of Exile", "Striving for Light",
+    "Torchlight: Infinite", "Undecember", "Darkhaven", "Diablo V",
+    "Emberville", "Gods, Death & Reapers", "No Rest For The Wicked",
+    "Path of Exile 2", "Pathfinder: Abomination Vaults", "TARAE: The Unbound",
+    "The Dark West", "Titan Quest II", "Wolcen 2",
+)
+
+
+def is_timeline_game(name: str) -> bool:
+    def normalize(value):
+        return re.sub(r"[^a-z0-9]", "", value.casefold())
+    return normalize(name) in {normalize(game) for game in ARPG_TIMELINE_GAMES}
 
 
 class SteamLookupError(Exception):
@@ -27,7 +46,7 @@ class SteamGame:
     name: str
     description: str
     image_url: str
-    release_at: datetime
+    release_at: Optional[datetime]
     official_url: Optional[str] = None
 
     @property
@@ -69,8 +88,14 @@ class ReleaseConfirmation(discord.ui.View):
         self.game = game
         self.requester_id = requester_id
         self.submitting = False
-        if game.release_at <= datetime.now(timezone.utc):
+        self.manual_date = (is_timeline_game(game.name) or game.release_at is None
+                            or game.release_at <= datetime.now(timezone.utc))
+        if self.manual_date:
             self.confirm.label = "Set event name and date"
+        if is_timeline_game(game.name):
+            self.add_item(discord.ui.Button(
+                label="Check dates on ARPG Timeline",
+                style=discord.ButtonStyle.link, url=ARPG_TIMELINE_URL))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id == self.requester_id:
@@ -80,7 +105,7 @@ class ReleaseConfirmation(discord.ui.View):
 
     @discord.ui.button(label="Create event", style=discord.ButtonStyle.success)
     async def confirm(self, interaction: discord.Interaction, _: discord.ui.Button):
-        if self.game.release_at <= datetime.now(timezone.utc):
+        if self.manual_date:
             await interaction.response.send_modal(CustomEventModal(self))
             return
         await interaction.response.defer(ephemeral=True)
@@ -105,9 +130,14 @@ def parse_event_date(value: str) -> datetime:
     try:
         date = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
     except ValueError:
-        raise SteamLookupError("Use YYYY-MM-DD HH:MM+HH:MM, e.g. 2027-01-15 20:00+01:00.")
+        raise SteamLookupError("Use YYYY-MM-DD HH:MM, e.g. 2027-01-15 20:00 (CET/CEST).")
     if date.tzinfo is None:
-        raise SteamLookupError("Include a UTC offset: +02:00 for Budapest summer time, +01:00 in winter.")
+        try:
+            date = pytz.timezone("Europe/Budapest").localize(date, is_dst=None)
+        except pytz.NonExistentTimeError:
+            raise SteamLookupError("That local time is skipped by the daylight-saving change. Choose another time.")
+        except pytz.AmbiguousTimeError:
+            raise SteamLookupError("That local time occurs twice when summer time ends. Choose another time or add +02:00 or +01:00.")
     if date <= datetime.now(timezone.utc):
         raise SteamLookupError("The event must start in the future.")
     return date
@@ -116,8 +146,8 @@ def parse_event_date(value: str) -> datetime:
 class CustomEventModal(discord.ui.Modal, title="Schedule a game event"):
     event_name = discord.ui.TextInput(label="Event name", max_length=100)
     event_date = discord.ui.TextInput(
-        label="Start date/time with UTC offset",
-        placeholder="2027-01-15 20:00+01:00", max_length=40,
+        label="Start date/time (CET/CEST)",
+        placeholder="2027-01-15 20:00", max_length=40,
     )
 
     def __init__(self, confirmation):
@@ -228,7 +258,12 @@ class SteamRelease(commands.Cog):
         data = result["data"]
         release = data.get("release_date") or {}
         raw_date = release.get("date", "Coming soon")
-        release_at = parse_release_date(raw_date)
+        try:
+            release_at = parse_release_date(raw_date)
+        except SteamLookupError:
+            if not is_timeline_game(data.get("name", "")):
+                raise
+            release_at = None
         description = html.unescape(re.sub(r"<[^>]+>", "", data.get("short_description", "")))
         return SteamGame(
             app_id=app_id,
@@ -254,7 +289,7 @@ class SteamRelease(commands.Cog):
         if guild is None:
             raise SteamLookupError("This command can only be used in a server.")
         start_time = start_time or game.release_at
-        if start_time <= datetime.now(timezone.utc):
+        if start_time is None or start_time <= datetime.now(timezone.utc):
             raise SteamLookupError("The event must start in the future.")
 
         image = await self.get_image(game.image_url)
@@ -296,26 +331,35 @@ class SteamRelease(commands.Cog):
             await ctx.send(f"Could not look up that game: {exc}", ephemeral=True)
             return
 
-        already_released = result.release_at <= datetime.now(timezone.utc)
-        if already_released and ctx.interaction is None:
+        timeline_game = is_timeline_game(result.name)
+        already_released = result.release_at is not None and result.release_at <= datetime.now(timezone.utc)
+        manual_date = timeline_game or already_released or result.release_at is None
+        if manual_date and ctx.interaction is None:
             await ctx.reply("Use /release for this game to privately enter an event name and date.")
             return
-        if is_name_search or already_released:
+        if is_name_search or manual_date:
             embed = discord.Embed(
                 title=result.name,
                 url=result.store_url,
                 description=result.description[:1000],
                 colour=discord.Colour.blue(),
             )
-            if already_released:
+            if timeline_game:
+                embed.add_field(
+                    name="Check season / event dates",
+                    value=f"[Open ARPG Timeline]({ARPG_TIMELINE_URL}), find **{result.name}**, "
+                          "then use **Set event name and date** below. Enter your local CET/CEST time.",
+                    inline=False,
+                )
+            if manual_date:
                 embed.add_field(name="Schedule an event", value="Choose the event name and future date/time in the private form.")
             else:
                 embed.add_field(name="Release date", value=discord.utils.format_dt(result.release_at, "D"))
             if result.image_url:
                 embed.set_image(url=result.image_url)
             await ctx.send(
-                ("Is this the game you meant? It is already released; set a name and date for your event."
-                 if already_released else "Is this the game you meant?"),
+                ("Is this the game you meant? Set a name and date for your event."
+                 if manual_date else "Is this the game you meant?"),
                 embed=embed,
                 view=ReleaseConfirmation(self, result, ctx.author.id),
                 ephemeral=True,
