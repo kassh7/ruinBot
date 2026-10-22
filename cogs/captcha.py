@@ -1,63 +1,106 @@
+import asyncio
+import glob
 import logging
+import math
+import os
+import random
 import re
+import time
 from io import BytesIO
 
-import aiohttp
 import discord
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 from discord.ext import commands
 
 log = logging.getLogger(__name__)
 
-MUVELET_URL = (
-    "https://hardverapro.hu/muvelet/tag/uj.php"
-    "?url=%2Fmuvelet%2Fhozzaferes%2Fbelepes.php%3Furl%3D%252Findex.html"
-)
-HEADERS = {
-    "accept": "application/json, text/javascript, */*; q=0.01",
-    "accept-language": "en-US,en;q=0.9",
-    "referer": "https://hardverapro.hu/index.html",
-    "user-agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
-    ),
-    "x-requested-with": "XMLHttpRequest",
-}
-# matches both "/captcha/file.png" and JSON-escaped "\/captcha\/file.png"
-CAPTCHA_PATH_RE = re.compile(r'\\?/captcha\\?/([^"\\]+\.png)')
+FONT_PATH = "res/DejaVuSans.ttf"
+FONT_SIZE = 42
+MARKOV_GLOB = "usr/markov/*/*.txt"
+WORD_CACHE_SECONDS = 300
 
-
-class CaptchaError(Exception):
-    pass
+# stuff in the markov corpus that should never end up as a captcha word
+STRIP_RE = re.compile(r"https?://\S+|<a?:\w+:\d+>|<[@#][!&]?\d+>")
+WORD_RE = re.compile(r"^[a-zà-žA-ZÀ-Ž]{3,12}$")
+PUNCT = ".,!?;:\"'()[]{}*_~`-"
 
 
 class Captcha(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-
-    async def _get(self, url):
-        timeout = aiohttp.ClientTimeout(total=15)
-        async with aiohttp.ClientSession(timeout=timeout, headers=HEADERS) as session:
-            async with session.get(url) as response:
-                response.raise_for_status()
-                return await response.read()
-
-    async def fetch_captcha_url(self) -> str:
-        text = (await self._get(MUVELET_URL)).decode("utf-8", "replace")
-        match = CAPTCHA_PATH_RE.search(text)
-        if not match:
-            raise CaptchaError("a hardverapro.hu nem adott captcha url-t")
-        return f"https://hardverapro.hu/captcha/{match.group(1)}"
+        self.font = ImageFont.truetype(FONT_PATH, FONT_SIZE)
+        self.words = []
+        self.words_expiry = 0.0
 
     @staticmethod
-    def on_white(data: bytes) -> bytes:
-        # the hardvera captcha is a transparent PNG with black text — unreadable
-        # on dark discord, so composite it onto a white background
-        img = Image.open(BytesIO(data)).convert("RGBA")
-        background = Image.new("RGBA", img.size, (255, 255, 255, 255))
-        composited = Image.alpha_composite(background, img)
+    def load_words() -> list[str]:
+        """Collect every usable word from all servers' markov files."""
+        words = set()
+        for path in glob.glob(MARKOV_GLOB):
+            if os.path.basename(path) == "urls.txt":
+                continue
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    for word in STRIP_RE.sub(" ", line).split():
+                        word = word.strip(PUNCT).lower()
+                        if WORD_RE.match(word):
+                            words.add(word)
+        return list(words)
+
+    async def get_words(self) -> list[str]:
+        if time.time() > self.words_expiry:
+            self.words = await asyncio.to_thread(self.load_words)
+            self.words_expiry = time.time() + WORD_CACHE_SECONDS
+        return self.words
+
+    def render(self, text: str) -> bytes:
+        """Draw black, wobbly, crossed-out text on a white background."""
+        ascent, descent = self.font.getmetrics()
+        tile_size = ascent + descent + 20
+        pad = 20
+        width = int(self.font.getlength(text) * 0.95) + pad * 2
+        height = tile_size + pad
+        image = Image.new("RGB", (width, height), "white")
+
+        # each letter gets its own rotation and vertical jitter
+        x = pad
+        for char in text:
+            advance = self.font.getlength(char)
+            if char != " ":
+                tile = Image.new("L", (tile_size, tile_size), 0)
+                ImageDraw.Draw(tile).text((10, 10), char, font=self.font, fill=255)
+                tile = tile.rotate(random.uniform(-22, 22), resample=Image.BICUBIC)
+                y = pad // 2 + random.randint(-5, 5)
+                image.paste("black", (int(x) - 10, y - 10), tile)
+            # letters squish into each other a little
+            x += advance * random.uniform(0.85, 1.0)
+
+        draw = ImageDraw.Draw(image)
+        # long wavy strikes through the text
+        for _ in range(random.randint(2, 3)):
+            y0 = pad // 2 + random.uniform(ascent * 0.45, ascent * 0.95)
+            amplitude = random.uniform(3, 10)
+            frequency = random.uniform(0.01, 0.04)
+            phase = random.uniform(0, math.tau)
+            slope = random.uniform(-0.08, 0.08)
+            start = random.randint(0, width // 4)
+            end = random.randint(width * 3 // 4, width)
+            points = [
+                (px, y0 + slope * (px - start) + amplitude * math.sin(px * frequency + phase))
+                for px in range(start, end, 4)
+            ]
+            draw.line(points, fill="black", width=random.randint(2, 3), joint="curve")
+        # short stray scratches
+        for _ in range(random.randint(2, 5)):
+            sx, sy = random.randint(0, width), random.randint(0, height)
+            draw.line(
+                [(sx, sy), (sx + random.randint(-30, 30), sy + random.randint(-15, 15))],
+                fill="black",
+                width=2,
+            )
+
         out = BytesIO()
-        composited.save(out, format="PNG")
+        image.save(out, format="PNG")
         return out.getvalue()
 
     @commands.hybrid_command(
@@ -67,16 +110,13 @@ class Captcha(commands.Cog):
     )
     @commands.cooldown(rate=1, per=2.0, type=commands.BucketType.user)
     async def captcha(self, ctx):
-        await ctx.defer()
-        try:
-            url = await self.fetch_captcha_url()
-            data = await self._get(url)
-            data = self.on_white(data)
-        except (aiohttp.ClientError, CaptchaError, Image.UnidentifiedImageError) as e:
-            log.exception("captcha request failed")
-            await ctx.reply(f"baj van: nem sikerült lekérni a captchát ({e})")
+        words = await self.get_words()
+        if len(words) < 2:
+            await ctx.reply("baj van: még nincs elég szó a markov adatbázisban")
             return
-        await ctx.reply(file=discord.File(BytesIO(data), filename="hardvera_captcha.png"))
+        text = " ".join(random.sample(words, 2))
+        data = await asyncio.to_thread(self.render, text)
+        await ctx.reply(file=discord.File(BytesIO(data), filename="captcha.png"))
 
     @captcha.error
     async def captcha_error(self, ctx, error):
