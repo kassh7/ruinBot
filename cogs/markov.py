@@ -321,8 +321,12 @@ class Markov(commands.Cog):
     @commands.hybrid_command(aliases=['mark'])
     async def markov(self, ctx, seed=None):
         try:
-            with open(f"usr/markov/{ctx.guild.id}/urls.txt", 'r', encoding='utf-8') as f:
-                urls = f.readlines()
+            # urls.txt only exists once someone has posted a media link
+            urls_file = f"usr/markov/{ctx.guild.id}/urls.txt"
+            urls = []
+            if os.path.exists(urls_file):
+                with open(urls_file, 'r', encoding='utf-8') as f:
+                    urls = f.readlines()
 
             chance = randint(1, 100)
             sentence = None
