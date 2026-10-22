@@ -31,6 +31,7 @@ class Captcha(commands.Cog):
         self.font = ImageFont.truetype(FONT_PATH, FONT_SIZE)
         self.words = []
         self.words_expiry = 0.0
+        self.refresh_task = None
 
     @staticmethod
     def load_words() -> list[str]:
@@ -47,10 +48,18 @@ class Captcha(commands.Cog):
                             words.add(word)
         return list(words)
 
+    async def refresh_words(self):
+        # bump the expiry first so concurrent calls don't start a second reload
+        self.words_expiry = time.time() + WORD_CACHE_SECONDS
+        self.words = await asyncio.to_thread(self.load_words)
+
     async def get_words(self) -> list[str]:
         if time.time() > self.words_expiry:
-            self.words = await asyncio.to_thread(self.load_words)
-            self.words_expiry = time.time() + WORD_CACHE_SECONDS
+            if self.words:
+                # serve the old words right away, reload in the background
+                self.refresh_task = asyncio.create_task(self.refresh_words())
+            else:
+                await self.refresh_words()
         return self.words
 
     def render(self, text: str) -> bytes:
@@ -110,6 +119,8 @@ class Captcha(commands.Cog):
     )
     @commands.cooldown(rate=1, per=2.0, type=commands.BucketType.user)
     async def captcha(self, ctx):
+        # slash commands must be acknowledged within 3s
+        await ctx.defer()
         words = await self.get_words()
         if len(words) < 2:
             await ctx.reply("baj van: még nincs elég szó a markov adatbázisban")
