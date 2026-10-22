@@ -1141,21 +1141,24 @@ class Markov(commands.Cog):
             print(f"baj van: {e}")
             await ctx.send(f"baj van: {e}")
 
+    def build_model(self, guild_id: int):
+        text = ""
+        for filename in os.listdir(f"usr/markov/{guild_id}/"):
+            if filename == "urls.txt":
+                continue
+            with open(os.path.join(f"usr/markov/{guild_id}/", filename), 'r', encoding='utf-8') as f:
+                text = text + f.read()
+        return markovify.NewlineText(text, state_size=self.config["state_size"])
+
     async def make_sentence(self, guild_id: int, max_words: int = None, fix_tags: bool = False, no_emotes: bool = False,
                             start_with: str = None):
-        text = ""
         sentence = None
-        for filename in os.listdir(f"usr/markov/{guild_id}/"):
-            with open(os.path.join(f"usr/markov/{guild_id}/", filename), 'r', encoding='utf-8') as f:
-                if filename == "urls.txt":
-                    continue
-                else:
-                    text = text + f.read()
-
         if guild_id not in self.text_model or self.text_model[guild_id]['expiry'] < datetime.now().timestamp():
             print(f"Generating new model for guild {guild_id}...")
+            # building the model takes seconds on big corpora; keep it off the event loop
+            # so other commands still get acknowledged in time
             self.text_model[guild_id] = {
-                "model": markovify.NewlineText(text, state_size=self.config["state_size"]),
+                "model": await asyncio.to_thread(self.build_model, guild_id),
                 "expiry": (datetime.now() + timedelta(minutes=5)).timestamp()  # Set expiry to 5 minutes from now
             }
         model = self.text_model[guild_id]["model"]
