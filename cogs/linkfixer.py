@@ -1,7 +1,9 @@
 import asyncio
+import json
 import random
 import re
 import time
+from pathlib import Path
 from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
 
 import discord
@@ -19,6 +21,8 @@ X_EMBED_DOMAINS = (
 )
 INSTAGRAM_EMBED_DOMAINS = ("kkinstagram.com", "ddinstagram.com")
 REDDIT_EMBED_DOMAINS = ("vxreddit.com", "rxddit.com")
+# Where link fixing is switched off (r!linkfixer ki): {"guilds": [...], "channels": [...]}
+DATA_FILE = Path("usr/linkfixer.json")
 EMBED_DOMAIN_GROUPS = (
     X_EMBED_DOMAINS,
     INSTAGRAM_EMBED_DOMAINS,
@@ -213,15 +217,69 @@ class LinkFixer(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+        DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
+        self.disabled = self.load_disabled()
+
         # Regex is magic! It finds the links even if there is other text in the message!
         self.x_pattern = re.compile(r'https?://(?:www\.)?(?:x|twitter)\.com/([^\s]+)')
         self.ig_pattern = re.compile(r'https?://(?:www\.)?instagram\.com/([^\s]+)')
         self.reddit_pattern = re.compile(r'https?://(?:www\.)?reddit\.com/([^\s]+)')
 
+    def load_disabled(self) -> dict[str, list[int]]:
+        if DATA_FILE.exists():
+            with DATA_FILE.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+            return {"guilds": data.get("guilds", []), "channels": data.get("channels", [])}
+        return {"guilds": [], "channels": []}
+
+    def save_disabled(self):
+        with DATA_FILE.open("w", encoding="utf-8") as f:
+            json.dump(self.disabled, f, indent=2)
+
+    def is_disabled(self, message: discord.Message) -> bool:
+        if message.guild and message.guild.id in self.disabled["guilds"]:
+            return True
+        channel = message.channel
+        parent_id = getattr(channel, "parent_id", None)  # threads follow their channel
+        return channel.id in self.disabled["channels"] or parent_id in self.disabled["channels"]
+
+    @commands.hybrid_command(
+        name="linkfixer",
+        with_app_command=True,
+        description="linkjavítás ki/be: r!linkfixer ki|be|allapot [szerver|csatorna]",
+    )
+    async def linkfixer(self, ctx, allapot: str = "allapot", hol: str = "szerver"):
+        if ctx.guild is None:
+            return
+        allapot, hol = allapot.lower(), hol.lower()
+        channel_scope = hol in ("csatorna", "channel", "itt", "here")
+        key, target = ("channels", ctx.channel.id) if channel_scope else ("guilds", ctx.guild.id)
+
+        if allapot in ("ki", "off", "be", "on"):
+            perms = ctx.channel.permissions_for(ctx.author)
+            allowed = perms.manage_channels if channel_scope else perms.manage_guild
+            if not allowed:
+                await ctx.reply("ehhez " + ("Manage Channels" if channel_scope else "Manage Server")
+                                + " jog kell")
+                return
+            if allapot in ("ki", "off") and target not in self.disabled[key]:
+                self.disabled[key].append(target)
+            elif allapot in ("be", "on") and target in self.disabled[key]:
+                self.disabled[key].remove(target)
+            self.save_disabled()
+
+        where = "ezen a csatornán" if channel_scope else "ezen a szerveren"
+        off = target in self.disabled[key]
+        await ctx.reply(f"linkjavítás {where}: {'kikapcsolva' if off else 'bekapcsolva'}")
+
     @commands.Cog.listener()
     async def on_message(self, message):
         # Ne válaszoljon saját magának vagy más botoknak!
         if message.author.bot:
+            return
+
+        # Ahol ki van kapcsolva (r!linkfixer ki), ott nem javít.
+        if self.is_disabled(message):
             return
 
         fixed_links = []
