@@ -1,7 +1,10 @@
 import asyncio
 import json
+import logging
+import os
 import random
 import re
+import tempfile
 import time
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
@@ -10,16 +13,17 @@ import discord
 from discord.ext import commands
 
 
+logger = logging.getLogger(__name__)
+
 X_EMBED_DOMAINS = (
     "fxtwitter.com",
     "vxtwitter.com",
     "fixupx.com",
     "girlcockx.com",
     "hitlerx.com",
-    "cunnyx.com",
     "stupidpenisx.com",
 )
-INSTAGRAM_EMBED_DOMAINS = ("kkinstagram.com", "ddinstagram.com")
+INSTAGRAM_EMBED_DOMAINS = ("kkinstagram.com", "ddinstagram.com", "eeinstagram.com")
 REDDIT_EMBED_DOMAINS = ("vxreddit.com", "rxddit.com")
 # Where link fixing is switched off (r!linkfixer ki): {"guilds": [...], "channels": [...]}
 DATA_FILE = Path("usr/linkfixer.json")
@@ -224,24 +228,56 @@ class LinkFixer(commands.Cog):
         self.x_pattern = re.compile(r'https?://(?:www\.)?(?:x|twitter)\.com/([^\s]+)')
         self.ig_pattern = re.compile(r'https?://(?:www\.)?instagram\.com/([^\s]+)')
         self.reddit_pattern = re.compile(r'https?://(?:www\.)?reddit\.com/([^\s]+)')
+        self.facebook_pattern = re.compile(
+            r'https?://(?:(?:www|m|mbasic|web)\.)?facebook\.com/([^\s<>]+)',
+            re.IGNORECASE,
+        )
 
     def load_disabled(self) -> dict[str, list[int]]:
-        if DATA_FILE.exists():
+        try:
             with DATA_FILE.open("r", encoding="utf-8") as f:
                 data = json.load(f)
+            if not isinstance(data, dict) or any(
+                not isinstance(data.get(key, []), list)
+                or any(type(value) is not int or value <= 0 for value in data.get(key, []))
+                for key in ("guilds", "channels")
+            ):
+                raise ValueError("Invalid linkfixer settings structure")
             return {"guilds": data.get("guilds", []), "channels": data.get("channels", [])}
+        except FileNotFoundError:
+            pass
+        except (OSError, ValueError):
+            logger.exception("Could not load %s; using default linkfixer settings", DATA_FILE)
         return {"guilds": [], "channels": []}
 
-    def save_disabled(self):
-        with DATA_FILE.open("w", encoding="utf-8") as f:
-            json.dump(self.disabled, f, indent=2)
+    def save_disabled(self, disabled: dict[str, list[int]]):
+        temporary_path = None
+        try:
+            # Keep the old file intact until a complete replacement is on disk.
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=DATA_FILE.parent,
+                prefix=f".{DATA_FILE.name}.", suffix=".tmp", delete=False,
+            ) as f:
+                temporary_path = Path(f.name)
+                json.dump(disabled, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            temporary_path.replace(DATA_FILE)
+        finally:
+            if temporary_path is not None:
+                temporary_path.unlink(missing_ok=True)
+
+    def disabled_reason(self, guild, channel) -> str | None:
+        if guild and guild.id in self.disabled["guilds"]:
+            return "a szerveren ki van kapcsolva"
+        if channel.id in self.disabled["channels"]:
+            return "ezen a csatornán ki van kapcsolva"
+        if getattr(channel, "parent_id", None) in self.disabled["channels"]:
+            return "a szülőcsatornán ki van kapcsolva"
+        return None
 
     def is_disabled(self, message: discord.Message) -> bool:
-        if message.guild and message.guild.id in self.disabled["guilds"]:
-            return True
-        channel = message.channel
-        parent_id = getattr(channel, "parent_id", None)  # threads follow their channel
-        return channel.id in self.disabled["channels"] or parent_id in self.disabled["channels"]
+        return self.disabled_reason(message.guild, message.channel) is not None
 
     @commands.hybrid_command(
         name="linkfixer",
@@ -262,15 +298,26 @@ class LinkFixer(commands.Cog):
                 await ctx.reply("ehhez " + ("Manage Channels" if channel_scope else "Manage Server")
                                 + " jog kell")
                 return
-            if allapot in ("ki", "off") and target not in self.disabled[key]:
-                self.disabled[key].append(target)
-            elif allapot in ("be", "on") and target in self.disabled[key]:
-                self.disabled[key].remove(target)
-            self.save_disabled()
+            disabled = {scope: ids.copy() for scope, ids in self.disabled.items()}
+            if allapot in ("ki", "off") and target not in disabled[key]:
+                disabled[key].append(target)
+            elif allapot in ("be", "on") and target in disabled[key]:
+                disabled[key].remove(target)
+            try:
+                self.save_disabled(disabled)
+            except OSError:
+                logger.exception("Could not save linkfixer settings to %s", DATA_FILE)
+                await ctx.reply("nem sikerült menteni; a linkjavítás beállítása nem változott")
+                return
+            self.disabled = disabled
 
         where = "ezen a csatornán" if channel_scope else "ezen a szerveren"
-        off = target in self.disabled[key]
-        await ctx.reply(f"linkjavítás {where}: {'kikapcsolva' if off else 'bekapcsolva'}")
+        reason = self.disabled_reason(ctx.guild, ctx.channel) if channel_scope else None
+        off = reason is not None if channel_scope else target in self.disabled[key]
+        inherited = ""
+        if channel_scope and reason and target not in self.disabled[key]:
+            inherited = f" ({reason})"
+        await ctx.reply(f"linkjavítás {where}: {'kikapcsolva' if off else 'bekapcsolva'}{inherited}")
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -296,6 +343,10 @@ class LinkFixer(commands.Cog):
         # --- REDDIT FIX ---
         for match in self.reddit_pattern.finditer(message.content):
             fixed_links.append(f"https://vxreddit.com/{match.group(1)}")
+
+        # Facebed has no alternate embedder, so it stays out of EMBED_DOMAIN_GROUPS.
+        for match in self.facebook_pattern.finditer(message.content):
+            fixed_links.append(f"https://facebed.com/{match.group(1)}")
 
         if fixed_links:
             try:

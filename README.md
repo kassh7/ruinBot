@@ -11,3 +11,5 @@ bot-baratok (opcionalis):
 .env-be BOT_FRIENDS=<bot user id, vesszovel tobbet> — az itt felsorolt botok taggelhetik/replyzhetik a ruinbotot es valaszt kapnak (pinggel), minden mas bot tovabbra is ignoralva. A bot-barat szovegebol NEM tanul a markov.
 linkjavitas ki/be (opcionalis):  
 `r!linkfixer ki` — az egesz szerveren kikapcsolja (Manage Server jog kell), `r!linkfixer ki csatorna` — csak abban a csatornaban (Manage Channels jog kell), `r!linkfixer be` visszakapcsolja, `r!linkfixer allapot` megmutatja. A beallitas a usr/linkfixer.json-ben marad meg.
+A csatornaszintu allapot a szerver es thread eseten a szulocsatorna tiltasat is jelzi; a `be csatorna` ezeket nem irja felul.
+A Facebook-linkeket (facebook.com, www/m/mbasic/web valtozatok) facebed.com linkekre javitja, az eredeti utvonallal es query parameterekkel.
