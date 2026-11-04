@@ -33,6 +33,9 @@ EMBED_DOMAIN_GROUPS = (
     REDDIT_EMBED_DOMAINS,
 )
 
+# Random language pool for the 🎲 button (meme mode)
+RANDOM_LANGS = ("zh", "ar", "pl", "ja", "ru", "es", "ko", "de")
+
 
 class LinkFixerView(discord.ui.View):
     def __init__(
@@ -47,10 +50,16 @@ class LinkFixerView(discord.ui.View):
         self.cog = cog
         self.original_message = original_message
         self.fixed_links = fixed_links
+        self.language: str | None = None
         self.delay = delay
         self.fallback_timeout = fallback_timeout
         self.suppression_cancelled = False
         self.bot_message: discord.Message | None = None
+        self._lang_flags: dict[str, str] = {
+            b.custom_id: str(b.emoji)
+            for b in self.children
+            if isinstance(b, discord.ui.Button) and b.custom_id.startswith("lang_")
+        }
 
         self._suppress_task = asyncio.create_task(self.delayed_suppress())
         self._fallback_task: asyncio.Task | None = None
@@ -58,6 +67,10 @@ class LinkFixerView(discord.ui.View):
             self.restart_fallback_timeout()
         else:
             self.remove_button("try_another_embedder")
+        # Translation suffixes only work on X embeds; hide the lang buttons otherwise.
+        if not any(self.is_x_link(link) for link in self.fixed_links):
+            for lang_id in ("lang_hu", "lang_en", "lang_random"):
+                self.remove_button(lang_id)
 
     def restart_fallback_timeout(self):
         if self._fallback_task and not self._fallback_task.done():
@@ -77,6 +90,47 @@ class LinkFixerView(discord.ui.View):
     def is_supported_embed_link(link: str) -> bool:
         hostname = urlparse(link).hostname
         return any(hostname in domains for domains in EMBED_DOMAIN_GROUPS)
+
+    @staticmethod
+    def is_x_link(link: str) -> bool:
+        hostname = urlparse(link).hostname
+        return hostname in X_EMBED_DOMAINS
+
+    @staticmethod
+    def apply_lang_suffix(link: str, lang: str | None) -> str:
+        """lang=None keeps the link byte-identical (photo paths etc.);
+        otherwise appends /lang at the end. fixed_links never carry a
+        suffix (it's view state, applied at render time), so this can't stack.
+        """
+        if not LinkFixerView.is_x_link(link) or not lang:
+            return link
+        parsed = urlparse(link)
+        path = f"{parsed.path.rstrip('/')}/{lang}"
+        return urlunparse(parsed._replace(path=path))
+
+    def refresh_lang_buttons(self):
+        for item in self.children:
+            if not (isinstance(item, discord.ui.Button) and item.custom_id.startswith("lang_")):
+                continue
+            if item.custom_id == "lang_random":
+                continue
+            code = item.custom_id.split("_")[1]
+            flag = self._lang_flags.get(item.custom_id, "")
+            # Discord only accepts ONE emoji per button, so selection swaps
+            # the flag for a checkmark; deselection puts the flag back.
+            if self.language == code:
+                item.emoji = "✅"
+                item.style = discord.ButtonStyle.success
+            else:
+                item.emoji = flag
+                item.style = discord.ButtonStyle.secondary
+
+    def build_message_content(self) -> str:
+        links = [self.apply_lang_suffix(link, self.language) for link in self.fixed_links]
+        return (
+            f"🗣️ **{self.original_message.author.display_name}** küldte:\n"
+            + "\n".join(links)
+        )
 
     @staticmethod
     def use_another_embedder(link: str) -> str:
@@ -129,12 +183,6 @@ class LinkFixerView(discord.ui.View):
             pass
         except Exception as e:
             print(f"baj van delayed suppress közben: {e}")
-
-    def build_message_content(self) -> str:
-        return (
-            f"🗣️ **{self.original_message.author.display_name}** küldte:\n"
-            + "\n".join(self.fixed_links)
-        )
 
     @staticmethod
     def add_cache_buster(url: str) -> str:
@@ -202,6 +250,59 @@ class LinkFixerView(discord.ui.View):
         except Exception as e:
             print(f"baj van refresh közben: {e}")
 
+    async def _apply_lang(self, lang: str | None, interaction: discord.Interaction):
+        # toggle: clicking the already-active fixed language goes back to original
+        if lang is not None and lang == self.language and lang in ("hu", "en"):
+            lang = None
+        self.language = lang
+        self.refresh_lang_buttons()
+        try:
+            await interaction.response.edit_message(
+                content=self.build_message_content(),
+                view=self
+            )
+        except Exception as e:
+            print(f"baj van lang refresh közben: {e}")
+
+    @discord.ui.button(
+        label="Magyar",
+        emoji="🇭🇺",
+        style=discord.ButtonStyle.secondary,
+        custom_id="lang_hu"
+    )
+    async def lang_hu(
+            self,
+            interaction: discord.Interaction,
+            button: discord.ui.Button
+    ):
+        await self._apply_lang("hu", interaction)
+
+    @discord.ui.button(
+        label="English",
+        emoji="🇬🇧",
+        style=discord.ButtonStyle.secondary,
+        custom_id="lang_en"
+    )
+    async def lang_en(
+            self,
+            interaction: discord.Interaction,
+            button: discord.ui.Button
+    ):
+        await self._apply_lang("en", interaction)
+
+    @discord.ui.button(
+        label="Random",
+        emoji="🎲",
+        style=discord.ButtonStyle.secondary,
+        custom_id="lang_random"
+    )
+    async def lang_random(
+            self,
+            interaction: discord.Interaction,
+            button: discord.ui.Button
+    ):
+        await self._apply_lang(random.choice(RANDOM_LANGS), interaction)
+
     async def on_timeout(self):
         if self._suppress_task and not self._suppress_task.done():
             # Let the suppress still happen naturally if it's already pending.
@@ -228,6 +329,7 @@ class LinkFixer(commands.Cog):
         self.x_pattern = re.compile(r'https?://(?:www\.)?(?:x|twitter)\.com/([^\s]+)')
         self.ig_pattern = re.compile(r'https?://(?:www\.)?instagram\.com/([^\s]+)')
         self.reddit_pattern = re.compile(r'https?://(?:www\.)?reddit\.com/([^\s]+)')
+        self.tiktok_pattern = re.compile(r'https?://(?:www\.)?tiktok\.com/([^\s]+)')
         self.facebook_pattern = re.compile(
             r'https?://(?:(?:www|m|mbasic|web)\.)?facebook\.com/([^\s<>]+)',
             re.IGNORECASE,
@@ -343,6 +445,10 @@ class LinkFixer(commands.Cog):
         # --- REDDIT FIX ---
         for match in self.reddit_pattern.finditer(message.content):
             fixed_links.append(f"https://vxreddit.com/{match.group(1)}")
+
+        # --- TIKTOK FIX --- (single embedder, so no embedder-switching for it)
+        for match in self.tiktok_pattern.finditer(message.content):
+            fixed_links.append(f"https://tnktok.com/{match.group(1)}")
 
         # Facebed has no alternate embedder, so it stays out of EMBED_DOMAIN_GROUPS.
         for match in self.facebook_pattern.finditer(message.content):
